@@ -1,0 +1,35 @@
+spring:
+  application:
+    name: flowforge-platform
+
+  datasource:
+    url: ${DB_URL:jdbc:postgresql://localhost:5433/flowforge}
+    username: ${DB_USERNAME:flowforge}
+    password: ${DB_PASSWORD:flowforge}
+
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    open-in-view: false
+
+  flyway:
+    enabled: true
+
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6380}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,prometheus
+  endpoint:
+    health:
+      probes:
+        enabled: true
+
+server:
+  port: ${SERVER_PORT:8081}
+  shutdown: graceful

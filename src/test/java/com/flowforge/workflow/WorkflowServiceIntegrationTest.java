@@ -18,7 +18,7 @@ class WorkflowServiceIntegrationTest {
     WorkflowService workflowService;
 
     @Test
-    void createsWorkflowWithTasks() {
+    void createsWorkflowWithManualScheduleDefaults() {
         var request = new WorkflowDtos.CreateWorkflowRequest(
                 "daily-report",
                 "Build daily report",
@@ -32,6 +32,9 @@ class WorkflowServiceIntegrationTest {
 
         assertThat(created.id()).isNotNull();
         assertThat(created.status()).isEqualTo(WorkflowStatus.DRAFT);
+        assertThat(created.scheduleType()).isEqualTo(ScheduleType.MANUAL);
+        assertThat(created.scheduleTimezone()).isEqualTo("UTC");
+        assertThat(created.cronExpression()).isNull();
         assertThat(created.tasks()).hasSize(2);
     }
 }

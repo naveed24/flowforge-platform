@@ -30,6 +30,16 @@ public class WorkflowDefinition {
     @Column(nullable = false, length = 30)
     private WorkflowStatus status;
 
+    @Enumerated(EnumType.STRING)
+    @Column(name = "schedule_type", nullable = false, length = 20)
+    private ScheduleType scheduleType;
+
+    @Column(name = "cron_expression", length = 120)
+    private String cronExpression;
+
+    @Column(name = "schedule_timezone", nullable = false, length = 64)
+    private String scheduleTimezone;
+
     @Version
     private Long version;
 
@@ -55,6 +65,8 @@ public class WorkflowDefinition {
         createdAt = now;
         updatedAt = now;
         if (status == null) status = WorkflowStatus.DRAFT;
+        if (scheduleType == null) scheduleType = ScheduleType.MANUAL;
+        if (scheduleTimezone == null || scheduleTimezone.isBlank()) scheduleTimezone = "UTC";
     }
 
     @PreUpdate

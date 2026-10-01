@@ -1,5 +1,6 @@
 package com.flowforge.workflow;
 
+import com.flowforge.common.BadRequestException;
 import com.flowforge.common.ConflictException;
 import com.flowforge.common.NotFoundException;
 import lombok.RequiredArgsConstructor;
@@ -31,6 +32,8 @@ public class WorkflowService {
                 .name(name)
                 .description(request.description())
                 .status(WorkflowStatus.DRAFT)
+                .scheduleType(ScheduleType.MANUAL)
+                .scheduleTimezone("UTC")
                 .build();
 
         for (WorkflowDtos.TaskRequest taskRequest : request.tasks()) {
@@ -55,9 +58,68 @@ public class WorkflowService {
     }
 
     public WorkflowDtos.WorkflowResponse get(Long id) {
-        return WorkflowDtos.WorkflowResponse.from(
-                repository.findById(id)
-                        .orElseThrow(() -> new NotFoundException("Workflow not found: " + id))
+        return WorkflowDtos.WorkflowResponse.from(findWorkflow(id));
+    }
+
+    @Transactional
+    public WorkflowDtos.WorkflowResponse updateSchedule(
+            Long id,
+            WorkflowDtos.UpdateScheduleRequest request) {
+
+        WorkflowDefinition workflow = findWorkflow(id);
+        WorkflowScheduleValidator.validate(
+                request.scheduleType(),
+                request.cronExpression(),
+                request.scheduleTimezone()
         );
+
+        workflow.setScheduleType(request.scheduleType());
+        workflow.setCronExpression(normalize(request.cronExpression()));
+        workflow.setScheduleTimezone(
+                request.scheduleTimezone() == null || request.scheduleTimezone().isBlank()
+                        ? "UTC"
+                        : request.scheduleTimezone().trim()
+        );
+
+        return WorkflowDtos.WorkflowResponse.from(repository.save(workflow));
+    }
+
+    @Transactional
+    public WorkflowDtos.WorkflowResponse activate(Long id) {
+        WorkflowDefinition workflow = findWorkflow(id);
+
+        if (workflow.getStatus() == WorkflowStatus.ARCHIVED) {
+            throw new BadRequestException("Archived workflows cannot be activated");
+        }
+
+        WorkflowScheduleValidator.validate(
+                workflow.getScheduleType(),
+                workflow.getCronExpression(),
+                workflow.getScheduleTimezone()
+        );
+
+        workflow.setStatus(WorkflowStatus.ACTIVE);
+        return WorkflowDtos.WorkflowResponse.from(repository.save(workflow));
+    }
+
+    @Transactional
+    public WorkflowDtos.WorkflowResponse pause(Long id) {
+        WorkflowDefinition workflow = findWorkflow(id);
+
+        if (workflow.getStatus() != WorkflowStatus.ACTIVE) {
+            throw new BadRequestException("Only active workflows can be paused");
+        }
+
+        workflow.setStatus(WorkflowStatus.PAUSED);
+        return WorkflowDtos.WorkflowResponse.from(repository.save(workflow));
+    }
+
+    private WorkflowDefinition findWorkflow(Long id) {
+        return repository.findById(id)
+                .orElseThrow(() -> new NotFoundException("Workflow not found: " + id));
+    }
+
+    private String normalize(String value) {
+        return value == null || value.isBlank() ? null : value.trim();
     }
 }

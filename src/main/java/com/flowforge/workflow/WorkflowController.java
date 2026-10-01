@@ -30,4 +30,21 @@ public class WorkflowController {
     public WorkflowDtos.WorkflowResponse get(@PathVariable Long id) {
         return workflowService.get(id);
     }
+
+    @PutMapping("/{id}/schedule")
+    public WorkflowDtos.WorkflowResponse updateSchedule(
+            @PathVariable Long id,
+            @Valid @RequestBody WorkflowDtos.UpdateScheduleRequest request) {
+        return workflowService.updateSchedule(id, request);
+    }
+
+    @PostMapping("/{id}/activate")
+    public WorkflowDtos.WorkflowResponse activate(@PathVariable Long id) {
+        return workflowService.activate(id);
+    }
+
+    @PostMapping("/{id}/pause")
+    public WorkflowDtos.WorkflowResponse pause(@PathVariable Long id) {
+        return workflowService.pause(id);
+    }
 }

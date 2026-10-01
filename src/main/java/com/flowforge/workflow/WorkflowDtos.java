@@ -20,6 +20,12 @@ public final class WorkflowDtos {
             @NotEmpty List<@Valid TaskRequest> tasks
     ) {}
 
+    public record UpdateScheduleRequest(
+            @NotNull ScheduleType scheduleType,
+            @Size(max = 120) String cronExpression,
+            @Size(max = 64) String scheduleTimezone
+    ) {}
+
     public record TaskRequest(
             @NotBlank @Size(max = 120) String taskKey,
             @NotNull TaskType taskType,

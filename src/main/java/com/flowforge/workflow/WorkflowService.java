@@ -67,6 +67,9 @@ public class WorkflowService {
             WorkflowDtos.UpdateScheduleRequest request) {
 
         WorkflowDefinition workflow = findWorkflow(id);
+        if (!workflow.getVersion().equals(request.expectedVersion())) {
+            throw new ConflictException("Workflow was modified; fetch the latest version and retry");
+        }
         WorkflowScheduleValidator.validate(
                 request.scheduleType(),
                 request.cronExpression(),

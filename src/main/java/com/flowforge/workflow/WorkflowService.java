@@ -48,7 +48,7 @@ public class WorkflowService {
             workflow.addTask(task);
         }
 
-        return WorkflowDtos.WorkflowResponse.from(repository.save(workflow));
+        return WorkflowDtos.WorkflowResponse.from(repository.saveAndFlush(workflow));
     }
 
     public List<WorkflowDtos.WorkflowResponse> list() {
@@ -84,7 +84,7 @@ public class WorkflowService {
                         : request.scheduleTimezone().trim()
         );
 
-        return WorkflowDtos.WorkflowResponse.from(repository.save(workflow));
+        return WorkflowDtos.WorkflowResponse.from(repository.saveAndFlush(workflow));
     }
 
     @Transactional
@@ -102,7 +102,7 @@ public class WorkflowService {
         );
 
         workflow.setStatus(WorkflowStatus.ACTIVE);
-        return WorkflowDtos.WorkflowResponse.from(repository.save(workflow));
+        return WorkflowDtos.WorkflowResponse.from(repository.saveAndFlush(workflow));
     }
 
     @Transactional
@@ -114,7 +114,7 @@ public class WorkflowService {
         }
 
         workflow.setStatus(WorkflowStatus.PAUSED);
-        return WorkflowDtos.WorkflowResponse.from(repository.save(workflow));
+        return WorkflowDtos.WorkflowResponse.from(repository.saveAndFlush(workflow));
     }
 
     private WorkflowDefinition findWorkflow(Long id) {

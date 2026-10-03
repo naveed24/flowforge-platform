@@ -21,6 +21,7 @@ public final class WorkflowDtos {
     ) {}
 
     public record UpdateScheduleRequest(
+            @NotNull Long expectedVersion,
             @NotNull ScheduleType scheduleType,
             @Size(max = 120) String cronExpression,
             @Size(max = 64) String scheduleTimezone

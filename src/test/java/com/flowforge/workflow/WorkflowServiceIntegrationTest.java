@@ -1,6 +1,7 @@
 package com.flowforge.workflow;
 
 import com.flowforge.common.BadRequestException;
+import com.flowforge.common.ConflictException;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -40,6 +41,7 @@ class WorkflowServiceIntegrationTest {
         var scheduled = workflowService.updateSchedule(
                 created.id(),
                 new WorkflowDtos.UpdateScheduleRequest(
+                        created.version(),
                         ScheduleType.CRON,
                         "0 0 6 * * *",
                         "Asia/Kolkata"
@@ -64,6 +66,7 @@ class WorkflowServiceIntegrationTest {
         assertThatThrownBy(() -> workflowService.updateSchedule(
                 created.id(),
                 new WorkflowDtos.UpdateScheduleRequest(
+                        created.version(),
                         ScheduleType.CRON,
                         "not-a-cron",
                         "UTC"
@@ -71,6 +74,27 @@ class WorkflowServiceIntegrationTest {
         ))
                 .isInstanceOf(BadRequestException.class)
                 .hasMessageContaining("valid cron");
+    }
+
+    @Test
+    void rejectsStaleScheduleUpdateWithoutOverwritingNewerSchedule() {
+        var created = workflowService.create(createRequest("version-conflict-workflow"));
+        var updated = workflowService.updateSchedule(
+                created.id(),
+                new WorkflowDtos.UpdateScheduleRequest(created.version(), ScheduleType.CRON,
+                        "0 0 6 * * *", "UTC")
+        );
+
+        assertThat(updated.version()).isGreaterThan(created.version());
+        assertThatThrownBy(() -> workflowService.updateSchedule(
+                created.id(),
+                new WorkflowDtos.UpdateScheduleRequest(created.version(), ScheduleType.MANUAL,
+                        null, "UTC")
+        )).isInstanceOf(ConflictException.class);
+
+        var persisted = workflowService.get(created.id());
+        assertThat(persisted.scheduleType()).isEqualTo(ScheduleType.CRON);
+        assertThat(persisted.cronExpression()).isEqualTo("0 0 6 * * *");
     }
 
     private WorkflowDtos.CreateWorkflowRequest createRequest(String name) {

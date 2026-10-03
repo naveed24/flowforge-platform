@@ -41,6 +41,7 @@ class WorkflowServiceIntegrationTest {
         var scheduled = workflowService.updateSchedule(
                 created.id(),
                 new WorkflowDtos.UpdateScheduleRequest(
+                        created.version(),
                         ScheduleType.CRON,
                         "0 0 6 * * *",
                         "Asia/Kolkata"
@@ -65,6 +66,7 @@ class WorkflowServiceIntegrationTest {
         assertThatThrownBy(() -> workflowService.updateSchedule(
                 created.id(),
                 new WorkflowDtos.UpdateScheduleRequest(
+                        created.version(),
                         ScheduleType.CRON,
                         "not-a-cron",
                         "UTC"

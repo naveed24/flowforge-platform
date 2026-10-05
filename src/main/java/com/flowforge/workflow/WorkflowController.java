@@ -47,4 +47,9 @@ public class WorkflowController {
     public WorkflowDtos.WorkflowResponse pause(@PathVariable Long id) {
         return workflowService.pause(id);
     }
+
+    @PostMapping("/{id}/archive")
+    public WorkflowDtos.WorkflowResponse archive(@PathVariable Long id) {
+        return workflowService.archive(id);
+    }
 }

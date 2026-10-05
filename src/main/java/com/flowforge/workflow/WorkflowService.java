@@ -67,6 +67,9 @@ public class WorkflowService {
             WorkflowDtos.UpdateScheduleRequest request) {
 
         WorkflowDefinition workflow = findWorkflow(id);
+        if (workflow.getStatus() == WorkflowStatus.ARCHIVED) {
+            throw new BadRequestException("Archived workflows cannot be rescheduled");
+        }
         if (!workflow.getVersion().equals(request.expectedVersion())) {
             throw new ConflictException("Workflow was modified; fetch the latest version and retry");
         }
@@ -114,6 +117,21 @@ public class WorkflowService {
         }
 
         workflow.setStatus(WorkflowStatus.PAUSED);
+        return WorkflowDtos.WorkflowResponse.from(repository.saveAndFlush(workflow));
+    }
+
+    @Transactional
+    public WorkflowDtos.WorkflowResponse archive(Long id) {
+        WorkflowDefinition workflow = findWorkflow(id);
+
+        if (workflow.getStatus() == WorkflowStatus.ACTIVE) {
+            throw new BadRequestException("Active workflows must be paused before archival");
+        }
+        if (workflow.getStatus() == WorkflowStatus.ARCHIVED) {
+            throw new BadRequestException("Workflow is already archived");
+        }
+
+        workflow.setStatus(WorkflowStatus.ARCHIVED);
         return WorkflowDtos.WorkflowResponse.from(repository.saveAndFlush(workflow));
     }
 

@@ -97,6 +97,44 @@ class WorkflowServiceIntegrationTest {
         assertThat(persisted.cronExpression()).isEqualTo("0 0 6 * * *");
     }
 
+    @Test
+    void requiresPauseBeforeArchivingActiveWorkflow() {
+        var created = workflowService.create(createRequest("archive-active-workflow"));
+        var active = workflowService.activate(created.id());
+
+        assertThat(active.status()).isEqualTo(WorkflowStatus.ACTIVE);
+        assertThatThrownBy(() -> workflowService.archive(created.id()))
+                .isInstanceOf(BadRequestException.class)
+                .hasMessageContaining("paused before archival");
+
+        workflowService.pause(created.id());
+        var archived = workflowService.archive(created.id());
+
+        assertThat(archived.status()).isEqualTo(WorkflowStatus.ARCHIVED);
+        assertThatThrownBy(() -> workflowService.activate(created.id()))
+                .isInstanceOf(BadRequestException.class)
+                .hasMessageContaining("cannot be activated");
+    }
+
+    @Test
+    void blocksScheduleUpdatesAfterArchival() {
+        var created = workflowService.create(createRequest("archived-schedule-workflow"));
+        var archived = workflowService.archive(created.id());
+
+        assertThat(archived.status()).isEqualTo(WorkflowStatus.ARCHIVED);
+        assertThatThrownBy(() -> workflowService.updateSchedule(
+                created.id(),
+                new WorkflowDtos.UpdateScheduleRequest(
+                        archived.version(),
+                        ScheduleType.CRON,
+                        "0 0 6 * * *",
+                        "UTC"
+                )
+        ))
+                .isInstanceOf(BadRequestException.class)
+                .hasMessageContaining("cannot be rescheduled");
+    }
+
     private WorkflowDtos.CreateWorkflowRequest createRequest(String name) {
         return new WorkflowDtos.CreateWorkflowRequest(
                 name,

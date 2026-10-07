@@ -20,6 +20,10 @@ public final class WorkflowDtos {
             @NotEmpty List<@Valid TaskRequest> tasks
     ) {}
 
+    public record LifecycleTransitionRequest(
+            @NotNull Long expectedVersion
+    ) {}
+
     public record UpdateScheduleRequest(
             @NotNull Long expectedVersion,
             @NotNull ScheduleType scheduleType,

@@ -52,10 +52,10 @@ class WorkflowServiceIntegrationTest {
         assertThat(scheduled.cronExpression()).isEqualTo("0 0 6 * * *");
         assertThat(scheduled.scheduleTimezone()).isEqualTo("Asia/Kolkata");
 
-        var active = workflowService.activate(created.id());
+        var active = workflowService.activate(created.id(), workflowService.get(created.id()).version());
         assertThat(active.status()).isEqualTo(WorkflowStatus.ACTIVE);
 
-        var paused = workflowService.pause(created.id());
+        var paused = workflowService.pause(created.id(), workflowService.get(created.id()).version());
         assertThat(paused.status()).isEqualTo(WorkflowStatus.PAUSED);
     }
 
@@ -100,18 +100,18 @@ class WorkflowServiceIntegrationTest {
     @Test
     void requiresPauseBeforeArchivingActiveWorkflow() {
         var created = workflowService.create(createRequest("archive-active-workflow"));
-        var active = workflowService.activate(created.id());
+        var active = workflowService.activate(created.id(), workflowService.get(created.id()).version());
 
         assertThat(active.status()).isEqualTo(WorkflowStatus.ACTIVE);
-        assertThatThrownBy(() -> workflowService.archive(created.id()))
+        assertThatThrownBy(() -> workflowService.archive(created.id(), workflowService.get(created.id()).version()))
                 .isInstanceOf(BadRequestException.class)
                 .hasMessageContaining("paused before archival");
 
-        workflowService.pause(created.id());
-        var archived = workflowService.archive(created.id());
+        workflowService.pause(created.id(), workflowService.get(created.id()).version());
+        var archived = workflowService.archive(created.id(), workflowService.get(created.id()).version());
 
         assertThat(archived.status()).isEqualTo(WorkflowStatus.ARCHIVED);
-        assertThatThrownBy(() -> workflowService.activate(created.id()))
+        assertThatThrownBy(() -> workflowService.activate(created.id(), workflowService.get(created.id()).version()))
                 .isInstanceOf(BadRequestException.class)
                 .hasMessageContaining("cannot be activated");
     }
@@ -119,7 +119,7 @@ class WorkflowServiceIntegrationTest {
     @Test
     void blocksScheduleUpdatesAfterArchival() {
         var created = workflowService.create(createRequest("archived-schedule-workflow"));
-        var archived = workflowService.archive(created.id());
+        var archived = workflowService.archive(created.id(), workflowService.get(created.id()).version());
 
         assertThat(archived.status()).isEqualTo(WorkflowStatus.ARCHIVED);
         assertThatThrownBy(() -> workflowService.updateSchedule(
@@ -133,6 +133,20 @@ class WorkflowServiceIntegrationTest {
         ))
                 .isInstanceOf(BadRequestException.class)
                 .hasMessageContaining("cannot be rescheduled");
+    }
+
+    @Test
+    void rejectsStaleLifecycleTransitionWithoutChangingStatus() {
+        var created = workflowService.create(createRequest("stale-lifecycle-workflow"));
+        var active = workflowService.activate(created.id(), created.version());
+
+        assertThat(active.version()).isGreaterThan(created.version());
+        assertThatThrownBy(() -> workflowService.pause(created.id(), created.version()))
+                .isInstanceOf(ConflictException.class)
+                .hasMessageContaining("fetch the latest version");
+
+        var persisted = workflowService.get(created.id());
+        assertThat(persisted.status()).isEqualTo(WorkflowStatus.ACTIVE);
     }
 
     private WorkflowDtos.CreateWorkflowRequest createRequest(String name) {

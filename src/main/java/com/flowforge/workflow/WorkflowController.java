@@ -39,17 +39,20 @@ public class WorkflowController {
     }
 
     @PostMapping("/{id}/activate")
-    public WorkflowDtos.WorkflowResponse activate(@PathVariable Long id) {
-        return workflowService.activate(id);
+    public WorkflowDtos.WorkflowResponse activate(@PathVariable Long id,
+                                                   @Valid @RequestBody WorkflowDtos.LifecycleTransitionRequest request) {
+        return workflowService.activate(id, request.expectedVersion());
     }
 
     @PostMapping("/{id}/pause")
-    public WorkflowDtos.WorkflowResponse pause(@PathVariable Long id) {
-        return workflowService.pause(id);
+    public WorkflowDtos.WorkflowResponse pause(@PathVariable Long id,
+                                                @Valid @RequestBody WorkflowDtos.LifecycleTransitionRequest request) {
+        return workflowService.pause(id, request.expectedVersion());
     }
 
     @PostMapping("/{id}/archive")
-    public WorkflowDtos.WorkflowResponse archive(@PathVariable Long id) {
-        return workflowService.archive(id);
+    public WorkflowDtos.WorkflowResponse archive(@PathVariable Long id,
+                                                  @Valid @RequestBody WorkflowDtos.LifecycleTransitionRequest request) {
+        return workflowService.archive(id, request.expectedVersion());
     }
 }

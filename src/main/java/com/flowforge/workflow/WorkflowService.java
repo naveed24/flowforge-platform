@@ -91,8 +91,9 @@ public class WorkflowService {
     }
 
     @Transactional
-    public WorkflowDtos.WorkflowResponse activate(Long id) {
+    public WorkflowDtos.WorkflowResponse activate(Long id, Long expectedVersion) {
         WorkflowDefinition workflow = findWorkflow(id);
+        validateExpectedVersion(workflow, expectedVersion);
 
         if (workflow.getStatus() == WorkflowStatus.ARCHIVED) {
             throw new BadRequestException("Archived workflows cannot be activated");
@@ -109,8 +110,9 @@ public class WorkflowService {
     }
 
     @Transactional
-    public WorkflowDtos.WorkflowResponse pause(Long id) {
+    public WorkflowDtos.WorkflowResponse pause(Long id, Long expectedVersion) {
         WorkflowDefinition workflow = findWorkflow(id);
+        validateExpectedVersion(workflow, expectedVersion);
 
         if (workflow.getStatus() != WorkflowStatus.ACTIVE) {
             throw new BadRequestException("Only active workflows can be paused");
@@ -121,8 +123,9 @@ public class WorkflowService {
     }
 
     @Transactional
-    public WorkflowDtos.WorkflowResponse archive(Long id) {
+    public WorkflowDtos.WorkflowResponse archive(Long id, Long expectedVersion) {
         WorkflowDefinition workflow = findWorkflow(id);
+        validateExpectedVersion(workflow, expectedVersion);
 
         if (workflow.getStatus() == WorkflowStatus.ACTIVE) {
             throw new BadRequestException("Active workflows must be paused before archival");
@@ -133,6 +136,12 @@ public class WorkflowService {
 
         workflow.setStatus(WorkflowStatus.ARCHIVED);
         return WorkflowDtos.WorkflowResponse.from(repository.saveAndFlush(workflow));
+    }
+
+    private void validateExpectedVersion(WorkflowDefinition workflow, Long expectedVersion) {
+        if (!workflow.getVersion().equals(expectedVersion)) {
+            throw new ConflictException("Workflow was modified; fetch the latest version and retry");
+        }
     }
 
     private WorkflowDefinition findWorkflow(Long id) {

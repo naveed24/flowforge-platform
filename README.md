@@ -79,6 +79,31 @@ Prometheus: http://localhost:8081/actuator/prometheus
 }
 ```
 
+
+## Execution API (initial REST slice)
+
+Workflow executions are persisted and can be submitted, inspected, and cancelled. An
+execution must belong to an **ACTIVE** workflow. The scheduler/worker processing
+the queued run is not yet exposed as a public API.
+
+- `POST /api/v1/workflows/{workflowId}/executions` — submit a run; responds
+  `201 Created` with an execution resource and `Location` header
+- `GET /api/v1/executions/{executionId}` — read run status, version and timestamps
+- `POST /api/v1/executions/{executionId}/cancel` — cancel a queued or running run
+
+A cancellation requires the *current execution version*, returned by GET or
+submission, to prevent stale clients overwriting newer state:
+
+```json
+{"expectedVersion": 0}
+```
+
+A stale version returns `409 Conflict`, an invalid transition returns `400 Bad
+Request`, and an unknown execution returns `404 Not Found`. Terminal executions
+cannot be cancelled again. These endpoints are currently intended for local
+development; production deployments require authentication and authorization
+before exposing execution control.
+
 ## Seven-day roadmap
 
 1. Foundation, workflow/task domain, DAG validation, persistence and containers

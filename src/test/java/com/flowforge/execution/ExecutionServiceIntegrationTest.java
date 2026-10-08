@@ -51,7 +51,7 @@ class ExecutionServiceIntegrationTest {
 
         assertThatThrownBy(() -> executionService.start(queued.getId()))
                 .isInstanceOf(BadRequestException.class);
-        assertThatThrownBy(() -> executionService.cancel(queued.getId()))
+        assertThatThrownBy(() -> executionService.cancel(queued.getId(), executionService.get(queued.getId()).getVersion()))
                 .isInstanceOf(BadRequestException.class);
     }
 

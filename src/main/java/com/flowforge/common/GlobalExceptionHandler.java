@@ -1,5 +1,6 @@
 package com.flowforge.common;
 
+import org.springframework.dao.OptimisticLockingFailureException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.MethodArgumentNotValidException;
@@ -29,6 +30,11 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(ConflictException.class)
     ResponseEntity<ApiError> conflict(ConflictException ex) {
         return build(HttpStatus.CONFLICT, ex.getMessage(), Map.of());
+    }
+
+    @ExceptionHandler(OptimisticLockingFailureException.class)
+    ResponseEntity<ApiError> optimisticConflict(OptimisticLockingFailureException ex) {
+        return build(HttpStatus.CONFLICT, "Resource was modified concurrently; fetch the latest version and retry", Map.of());
     }
 
     @ExceptionHandler(BadRequestException.class)

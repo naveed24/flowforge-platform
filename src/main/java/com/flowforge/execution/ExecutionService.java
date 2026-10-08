@@ -1,6 +1,7 @@
 package com.flowforge.execution;
 
 import com.flowforge.common.BadRequestException;
+import com.flowforge.common.ConflictException;
 import com.flowforge.common.NotFoundException;
 import com.flowforge.workflow.WorkflowDefinition;
 import com.flowforge.workflow.WorkflowRepository;
@@ -52,8 +53,11 @@ public class ExecutionService {
     }
 
     @Transactional
-    public WorkflowExecution cancel(Long executionId) {
+    public WorkflowExecution cancel(Long executionId, Long expectedVersion) {
         WorkflowExecution execution = find(executionId);
+        if (!execution.getVersion().equals(expectedVersion)) {
+            throw new ConflictException("Execution was modified; fetch the latest version and retry");
+        }
         if (execution.getStatus() != ExecutionStatus.QUEUED && execution.getStatus() != ExecutionStatus.RUNNING) {
             throw new BadRequestException("Only queued or running executions can be cancelled");
         }

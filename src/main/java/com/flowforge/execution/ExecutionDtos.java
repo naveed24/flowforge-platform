@@ -15,6 +15,9 @@ public final class ExecutionDtos {
             Long workflowId,
             ExecutionStatus status,
             Long version,
+            int attemptCount,
+            int maxAttempts,
+            Instant nextAttemptAt,
             Instant createdAt,
             Instant startedAt,
             Instant finishedAt
@@ -25,6 +28,9 @@ public final class ExecutionDtos {
                     execution.getWorkflow().getId(),
                     execution.getStatus(),
                     execution.getVersion(),
+                    execution.getAttemptCount(),
+                    execution.getMaxAttempts(),
+                    execution.getNextAttemptAt(),
                     execution.getCreatedAt(),
                     execution.getStartedAt(),
                     execution.getFinishedAt()

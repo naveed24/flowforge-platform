@@ -89,7 +89,7 @@ the queued run is not yet exposed as a public API.
 - `POST /api/v1/workflows/{workflowId}/executions` — submit a run; responds
   `201 Created` with an execution resource and `Location` header
 - `GET /api/v1/executions/{executionId}` — read run status, version and timestamps
-- `POST /api/v1/executions/{executionId}/cancel` — cancel a queued or running run
+- `POST /api/v1/executions/{executionId}/cancel` — cancel a queued, running or retry-waiting run
 
 A cancellation requires the *current execution version*, returned by GET or
 submission, to prevent stale clients overwriting newer state:
@@ -103,6 +103,26 @@ Request`, and an unknown execution returns `404 Not Found`. Terminal executions
 cannot be cancelled again. These endpoints are currently intended for local
 development; production deployments require authentication and authorization
 before exposing execution control.
+
+## Durable execution retry state (current slice)
+
+Executions persist `attemptCount`, `maxAttempts` (currently **3 total attempts**),
+and `nextAttemptAt` in PostgreSQL, and expose them in the execution response.
+Starting an attempt increments its count and records `startedAt`. When a
+running attempt fails and retries remain, the execution enters `RETRY_WAIT`
+instead of `FAILED`. The next attempt is eligible only when its persisted
+`nextAttemptAt` is reached.
+
+The retry policy uses **30 seconds, 60 seconds, then exponential doubling**,
+capped at 30 minutes for future higher retry limits. Once the last attempt
+fails, the execution becomes terminally `FAILED` with `finishedAt`. Successful
+runs terminate in `SUCCEEDED`; cancellations of waiting runs clear the retry
+timestamp and terminate in `CANCELLED`.
+
+Retry eligibility is enforced by the execution service, but **automatic due-run
+polling, worker claiming/leases, dispatch, and idempotency keys are not yet
+implemented**. Those are separate upcoming slices. New retries are not
+automatically dispatched by this release.
 
 ## Seven-day roadmap
 

@@ -47,11 +47,16 @@ class ExecutionServiceIntegrationTest {
                 .hasMessageContaining("RUNNING");
 
         executionService.start(queued.getId());
-        executionService.fail(queued.getId());
+        var waiting = executionService.fail(queued.getId());
 
+        assertThat(waiting.getStatus()).isEqualTo(ExecutionStatus.RETRY_WAIT);
         assertThatThrownBy(() -> executionService.start(queued.getId()))
-                .isInstanceOf(BadRequestException.class);
-        assertThatThrownBy(() -> executionService.cancel(queued.getId(), executionService.get(queued.getId()).getVersion()))
+                .isInstanceOf(BadRequestException.class)
+                .hasMessageContaining("not due yet");
+
+        var cancelled = executionService.cancel(queued.getId(), waiting.getVersion());
+        assertThat(cancelled.getStatus()).isEqualTo(ExecutionStatus.CANCELLED);
+        assertThatThrownBy(() -> executionService.cancel(queued.getId(), cancelled.getVersion()))
                 .isInstanceOf(BadRequestException.class);
     }
 

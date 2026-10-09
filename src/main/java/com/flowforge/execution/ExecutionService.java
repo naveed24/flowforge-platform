@@ -10,6 +10,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Clock;
 import java.time.Instant;
 
 @Service
@@ -19,6 +20,7 @@ public class ExecutionService {
 
     private final WorkflowExecutionRepository executionRepository;
     private final WorkflowRepository workflowRepository;
+    private final Clock clock;
 
     @Transactional
     public WorkflowExecution enqueue(Long workflowId) {
@@ -30,15 +32,26 @@ public class ExecutionService {
         return executionRepository.saveAndFlush(WorkflowExecution.builder()
                 .workflow(workflow)
                 .status(ExecutionStatus.QUEUED)
+                .attemptCount(0)
+                .maxAttempts(RetryBackoffPolicy.DEFAULT_MAX_ATTEMPTS)
                 .build());
     }
 
     @Transactional
     public WorkflowExecution start(Long executionId) {
         WorkflowExecution execution = find(executionId);
-        requireStatus(execution, ExecutionStatus.QUEUED, "started");
+        Instant now = Instant.now(clock);
+        if (execution.getStatus() == ExecutionStatus.RETRY_WAIT) {
+            if (execution.getNextAttemptAt() == null || now.isBefore(execution.getNextAttemptAt())) {
+                throw new BadRequestException("Retry is not due yet");
+            }
+        } else {
+            requireStatus(execution, ExecutionStatus.QUEUED, "started");
+        }
         execution.setStatus(ExecutionStatus.RUNNING);
-        execution.setStartedAt(Instant.now());
+        execution.setAttemptCount(execution.getAttemptCount() + 1);
+        execution.setStartedAt(now);
+        execution.setNextAttemptAt(null);
         return executionRepository.saveAndFlush(execution);
     }
 
@@ -49,7 +62,18 @@ public class ExecutionService {
 
     @Transactional
     public WorkflowExecution fail(Long executionId) {
-        return finish(executionId, ExecutionStatus.FAILED);
+        WorkflowExecution execution = find(executionId);
+        requireStatus(execution, ExecutionStatus.RUNNING, "finished");
+        Instant now = Instant.now(clock);
+        if (execution.getAttemptCount() < execution.getMaxAttempts()) {
+            execution.setStatus(ExecutionStatus.RETRY_WAIT);
+            execution.setNextAttemptAt(now.plus(RetryBackoffPolicy.delayAfterFailure(execution.getAttemptCount())));
+        } else {
+            execution.setStatus(ExecutionStatus.FAILED);
+            execution.setNextAttemptAt(null);
+            execution.setFinishedAt(now);
+        }
+        return executionRepository.saveAndFlush(execution);
     }
 
     @Transactional
@@ -58,11 +82,13 @@ public class ExecutionService {
         if (!execution.getVersion().equals(expectedVersion)) {
             throw new ConflictException("Execution was modified; fetch the latest version and retry");
         }
-        if (execution.getStatus() != ExecutionStatus.QUEUED && execution.getStatus() != ExecutionStatus.RUNNING) {
-            throw new BadRequestException("Only queued or running executions can be cancelled");
+        if (execution.getStatus() != ExecutionStatus.QUEUED && execution.getStatus() != ExecutionStatus.RUNNING
+                && execution.getStatus() != ExecutionStatus.RETRY_WAIT) {
+            throw new BadRequestException("Only queued, running or retry-waiting executions can be cancelled");
         }
         execution.setStatus(ExecutionStatus.CANCELLED);
-        execution.setFinishedAt(Instant.now());
+        execution.setNextAttemptAt(null);
+        execution.setFinishedAt(Instant.now(clock));
         return executionRepository.saveAndFlush(execution);
     }
 
@@ -74,7 +100,7 @@ public class ExecutionService {
         WorkflowExecution execution = find(executionId);
         requireStatus(execution, ExecutionStatus.RUNNING, "finished");
         execution.setStatus(target);
-        execution.setFinishedAt(Instant.now());
+        execution.setFinishedAt(Instant.now(clock));
         return executionRepository.saveAndFlush(execution);
     }
 

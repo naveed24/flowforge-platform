@@ -33,6 +33,17 @@ public class WorkflowExecution {
     @Version
     private Long version;
 
+    @Builder.Default
+    @Column(name = "attempt_count", nullable = false)
+    private int attemptCount = 0;
+
+    @Builder.Default
+    @Column(name = "max_attempts", nullable = false)
+    private int maxAttempts = RetryBackoffPolicy.DEFAULT_MAX_ATTEMPTS;
+
+    @Column(name = "next_attempt_at")
+    private Instant nextAttemptAt;
+
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;
 

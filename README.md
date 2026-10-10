@@ -119,10 +119,22 @@ fails, the execution becomes terminally `FAILED` with `finishedAt`. Successful
 runs terminate in `SUCCEEDED`; cancellations of waiting runs clear the retry
 timestamp and terminate in `CANCELLED`.
 
-Retry eligibility is enforced by the execution service, but **automatic due-run
-polling, worker claiming/leases, dispatch, and idempotency keys are not yet
-implemented**. Those are separate upcoming slices. New retries are not
-automatically dispatched by this release.
+Retry eligibility is enforced by the execution service. A bounded background poller
+now **automatically requeues due retries** from `RETRY_WAIT` to `QUEUED` at
+five-second intervals (after a five-second startup delay). It processes up to
+100 due executions per cycle, oldest due first. Requeueing uses a conditional
+database update that increments the optimistic version, so overlapping pollers
+cannot requeue the same retry twice or resurrect a cancelled execution.
+The next worker start increments `attemptCount`, not the requeue operation.
+
+Configure `flowforge.execution.retry.polling-enabled=false` to disable polling,
+`flowforge.execution.retry.poll-interval-ms` to adjust the interval, and
+`flowforge.execution.retry.poll-initial-delay-ms` to adjust the startup delay.
+Tests disable the timer and exercise the polling service with a controlled clock.
+
+**Important:** Requeueing is not worker dispatch. A separate worker/dispatcher
+must claim and start queued executions. Distributed worker leases, task
+execution, and idempotency keys remain future milestones.
 
 ## Seven-day roadmap
 

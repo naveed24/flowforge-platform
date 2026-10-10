@@ -16,3 +16,8 @@ spring:
     redis:
       repositories:
         enabled: false
+
+flowforge:
+  execution:
+    retry:
+      polling-enabled: false

@@ -24,6 +24,11 @@ public class ExecutionService {
 
     @Transactional
     public WorkflowExecution enqueue(Long workflowId) {
+        return enqueue(workflowId, null);
+    }
+
+    @Transactional
+    public WorkflowExecution enqueue(Long workflowId, String idempotencyKey) {
         WorkflowDefinition workflow = workflowRepository.findById(workflowId)
                 .orElseThrow(() -> new NotFoundException("Workflow not found: " + workflowId));
         if (workflow.getStatus() != WorkflowStatus.ACTIVE) {
@@ -31,6 +36,7 @@ public class ExecutionService {
         }
         return executionRepository.saveAndFlush(WorkflowExecution.builder()
                 .workflow(workflow)
+                .idempotencyKey(idempotencyKey)
                 .status(ExecutionStatus.QUEUED)
                 .attemptCount(0)
                 .maxAttempts(RetryBackoffPolicy.DEFAULT_MAX_ATTEMPTS)

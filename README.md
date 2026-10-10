@@ -25,7 +25,7 @@ FlowForge is a production-style distributed workflow and background-job orchestr
 - Micrometer + Prometheus
 - Docker / Docker Compose
 - React (planned dashboard)
-- GitHub Actions (planned CI)
+- GitHub Actions (Maven test CI)
 
 ## Day 1
 
@@ -87,7 +87,8 @@ execution must belong to an **ACTIVE** workflow. The scheduler/worker processing
 the queued run is not yet exposed as a public API.
 
 - `POST /api/v1/workflows/{workflowId}/executions` — submit a run; responds
-  `201 Created` with an execution resource and `Location` header
+  `201 Created` with an execution resource and `Location` header; optional
+  `Idempotency-Key` header prevents duplicate submissions per workflow
 - `GET /api/v1/executions/{executionId}` — read run status, version and timestamps
 - `POST /api/v1/executions/{executionId}/cancel` — cancel a queued, running or retry-waiting run
 
@@ -132,9 +133,30 @@ Configure `flowforge.execution.retry.polling-enabled=false` to disable polling,
 `flowforge.execution.retry.poll-initial-delay-ms` to adjust the startup delay.
 Tests disable the timer and exercise the polling service with a controlled clock.
 
+### Idempotent execution submission
+
+Include an optional `Idempotency-Key` header when submitting an execution:
+
+```bash
+curl -i -X POST http://localhost:8081/api/v1/workflows/1/executions \
+  -H 'Idempotency-Key: checkout-123'
+```
+
+The first request creates an execution (HTTP 201). Replaying the same key for
+the same workflow returns the **original** execution and its current status
+(HTTP 200), even after the workflow is paused or the execution completes.
+Different workflows may use the same key. Requests with no key still create
+a fresh execution every time. Valid keys are 1-128 ASCII characters; they
+must start with a letter or digit and may contain letters, digits, `.`,
+`_`, `:`, or `-`. Invalid keys return HTTP 400.
+
+PostgreSQL V5 adds a scoped unique index to reject concurrent duplicate
+inserts. The API resolves a uniqueness race only after the losing
+transaction rolls back, and never hides other database integrity failures.
+
 **Important:** Requeueing is not worker dispatch. A separate worker/dispatcher
 must claim and start queued executions. Distributed worker leases, task
-execution, and idempotency keys remain future milestones.
+execution, remain future milestones.
 
 ## Seven-day roadmap
 

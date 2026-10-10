@@ -25,7 +25,7 @@ FlowForge is a production-style distributed workflow and background-job orchestr
 - Micrometer + Prometheus
 - Docker / Docker Compose
 - React (planned dashboard)
-- GitHub Actions (Maven test CI)
+- GitHub Actions (Maven tests, PostgreSQL/Flyway migration smoke test)
 
 ## Day 1
 
@@ -157,6 +157,15 @@ transaction rolls back, and never hides other database integrity failures.
 **Important:** Requeueing is not worker dispatch. A separate worker/dispatcher
 must claim and start queued executions. Distributed worker leases, task
 execution, remain future milestones.
+
+## CI verification
+
+GitHub Actions runs the Spring/H2 unit and integration tests, plus a real
+PostgreSQL 16 migration smoke test. The PostgreSQL check applies all Flyway
+migrations to the isolated `flowforge_ci` database and verifies the workflow
+schedule columns and execution idempotency index. Locally it is skipped
+unless `FLOWFORGE_PG_TEST_URL` is provided. To prevent accidental data changes,
+the test accepts only a localhost database named `flowforge_ci`.
 
 ## Seven-day roadmap
 

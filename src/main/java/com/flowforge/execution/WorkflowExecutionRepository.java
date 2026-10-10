@@ -9,8 +9,14 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
 import java.util.List;
+import java.util.Optional;
 
 public interface WorkflowExecutionRepository extends JpaRepository<WorkflowExecution, Long> {
+
+    @Query("select e from WorkflowExecution e where e.workflow.id = :workflowId and e.idempotencyKey = :key")
+    Optional<WorkflowExecution> findIdempotentSubmission(
+            @Param("workflowId") Long workflowId, @Param("key") String key);
+
 
     @Query("""
             select e.id from WorkflowExecution e

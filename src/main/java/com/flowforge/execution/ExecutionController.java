@@ -2,6 +2,7 @@ package com.flowforge.execution;
 
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
@@ -13,12 +14,17 @@ import java.net.URI;
 public class ExecutionController {
 
     private final ExecutionService executionService;
+    private final ExecutionSubmissionService submissionService;
 
     @PostMapping("/workflows/{workflowId}/executions")
-    public ResponseEntity<ExecutionDtos.ExecutionResponse> enqueue(@PathVariable Long workflowId) {
-        var execution = ExecutionDtos.ExecutionResponse.from(executionService.enqueue(workflowId));
-        return ResponseEntity.created(URI.create("/api/v1/executions/" + execution.id()))
-                .body(execution);
+    public ResponseEntity<ExecutionDtos.ExecutionResponse> enqueue(
+            @PathVariable Long workflowId,
+            @RequestHeader(name = "Idempotency-Key", required = false) String idempotencyKey) {
+        var submission = submissionService.submit(workflowId, idempotencyKey);
+        var execution = ExecutionDtos.ExecutionResponse.from(submission.execution());
+        URI location = URI.create("/api/v1/executions/" + execution.id());
+        return ResponseEntity.status(submission.replayed() ? HttpStatus.OK : HttpStatus.CREATED)
+                .location(location).body(execution);
     }
 
     @GetMapping("/executions/{executionId}")

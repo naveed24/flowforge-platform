@@ -10,6 +10,9 @@ import java.time.Instant;
 @Table(name = "workflow_executions", indexes = {
         @Index(name = "idx_workflow_executions_workflow_id", columnList = "workflow_id"),
         @Index(name = "idx_workflow_executions_status", columnList = "status")
+}, uniqueConstraints = {
+        @UniqueConstraint(name = "uq_workflow_executions_idempotency",
+                columnNames = {"workflow_id", "idempotency_key"})
 })
 @Getter
 @Setter
@@ -25,6 +28,9 @@ public class WorkflowExecution {
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "workflow_id", nullable = false)
     private WorkflowDefinition workflow;
+
+    @Column(name = "idempotency_key", length = 128)
+    private String idempotencyKey;
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 20)

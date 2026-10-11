@@ -18,6 +18,37 @@ public interface WorkflowExecutionRepository extends JpaRepository<WorkflowExecu
             @Param("workflowId") Long workflowId, @Param("key") String key);
 
 
+    /**
+     * Bounded oldest-first scan; competing workers may see the same candidates,
+     * but only one can win the conditional claim below.
+     */
+    @Query("""
+            select e.id from WorkflowExecution e
+            where e.status = :queued and e.attemptCount < e.maxAttempts
+            order by e.createdAt asc, e.id asc
+            """)
+    List<Long> findClaimableQueuedIds(
+            @Param("queued") ExecutionStatus queued, Pageable pageable);
+
+    /**
+     * Atomic worker claim: a cancellation or another worker's claim wins if it
+     * updates the row first. Increment the optimistic version for API clients.
+     */
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
+    @Transactional
+    @Query("""
+            update WorkflowExecution e
+            set e.status = :running, e.attemptCount = e.attemptCount + 1,
+                e.startedAt = :now, e.nextAttemptAt = null, e.version = e.version + 1
+            where e.id = :id and e.status = :queued
+              and e.attemptCount < e.maxAttempts
+            """)
+    int claimQueuedExecution(
+            @Param("id") Long id,
+            @Param("queued") ExecutionStatus queued,
+            @Param("running") ExecutionStatus running,
+            @Param("now") Instant now);
+
     @Query("""
             select e.id from WorkflowExecution e
             where e.status = :status and e.nextAttemptAt <= :now

@@ -3,6 +3,7 @@ package com.flowforge.execution;
 import com.flowforge.workflow.TaskType;
 import com.flowforge.workflow.WorkflowDtos;
 import com.flowforge.workflow.WorkflowService;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -25,6 +26,13 @@ class ExecutionClaimServiceIntegrationTest {
     @Autowired private WorkflowService workflowService;
     @Autowired private ExecutionService executionService;
     @Autowired private ExecutionClaimService claimService;
+    @Autowired private WorkflowExecutionRepository executionRepository;
+
+    @BeforeEach
+    void clearPreviousExecutions() {
+        // H2 test contexts are reused by other integration test classes.
+        executionRepository.deleteAll();
+    }
 
     @Test
     void claimsQueuedExecutionsOldestFirstOnlyOnce() {

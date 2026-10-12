@@ -105,6 +105,26 @@ cannot be cancelled again. These endpoints are currently intended for local
 development; production deployments require authentication and authorization
 before exposing execution control.
 
+## Paginated execution history
+
+`GET /api/v1/workflows/{workflowId}/executions` returns a bounded history for
+one workflow, newest first (descending `createdAt`, then `id` for stable
+ordering when timestamps match). An optional `status` query parameter filters
+to one of `QUEUED`, `RUNNING`, `RETRY_WAIT`, `SUCCEEDED`, `FAILED`, or
+`CANCELLED`.
+
+Example: `GET /api/v1/workflows/1/executions?status=FAILED&page=0&size=20`.
+
+The response contains `items` (execution resources), `page`, `size`,
+`totalElements`, `totalPages`, and `hasNext`. Pagination is zero-based,
+defaults to 20 results per page, and permits sizes 1–100. Invalid pagination
+or status returns HTTP 400; an unknown workflow returns HTTP 404. Existing
+workflows without executions return an empty page. PostgreSQL indexes support
+both filtered and unfiltered history scans.
+
+This endpoint is for local development; enforce authentication and per-workflow
+authorization before exposing it in production.
+
 ## Durable execution retry state (current slice)
 
 Executions persist `attemptCount`, `maxAttempts` (currently **3 total attempts**),

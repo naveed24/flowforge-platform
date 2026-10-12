@@ -3,6 +3,8 @@ package com.flowforge.execution;
 import jakarta.validation.constraints.NotNull;
 
 import java.time.Instant;
+import java.util.List;
+import org.springframework.data.domain.Page;
 
 public final class ExecutionDtos {
 
@@ -35,6 +37,21 @@ public final class ExecutionDtos {
                     execution.getStartedAt(),
                     execution.getFinishedAt()
             );
+        }
+    }
+    /** Stable API contract rather than exposing Spring Data's Page internals. */
+    public record ExecutionPageResponse(
+            List<ExecutionResponse> items,
+            int page,
+            int size,
+            long totalElements,
+            int totalPages,
+            boolean hasNext
+    ) {
+        static ExecutionPageResponse from(Page<ExecutionResponse> result) {
+            return new ExecutionPageResponse(
+                    result.getContent(), result.getNumber(), result.getSize(),
+                    result.getTotalElements(), result.getTotalPages(), result.hasNext());
         }
     }
 }

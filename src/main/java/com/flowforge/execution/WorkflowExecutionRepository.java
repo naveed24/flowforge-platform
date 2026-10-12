@@ -1,5 +1,6 @@
 package com.flowforge.execution;
 
+import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Modifying;
@@ -12,6 +13,15 @@ import java.util.List;
 import java.util.Optional;
 
 public interface WorkflowExecutionRepository extends JpaRepository<WorkflowExecution, Long> {
+
+    @Query("select e from WorkflowExecution e where e.workflow.id = :workflowId")
+    Page<WorkflowExecution> findHistoryByWorkflowId(
+            @Param("workflowId") Long workflowId, Pageable pageable);
+
+    @Query("select e from WorkflowExecution e where e.workflow.id = :workflowId and e.status = :status")
+    Page<WorkflowExecution> findHistoryByWorkflowIdAndStatus(
+            @Param("workflowId") Long workflowId,
+            @Param("status") ExecutionStatus status, Pageable pageable);
 
     @Query("select e from WorkflowExecution e where e.workflow.id = :workflowId and e.idempotencyKey = :key")
     Optional<WorkflowExecution> findIdempotentSubmission(

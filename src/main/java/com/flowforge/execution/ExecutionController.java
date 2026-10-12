@@ -27,6 +27,16 @@ public class ExecutionController {
                 .location(location).body(execution);
     }
 
+    @GetMapping("/workflows/{workflowId}/executions")
+    public ExecutionDtos.ExecutionPageResponse history(
+            @PathVariable Long workflowId,
+            @RequestParam(required = false) ExecutionStatus status,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size) {
+        return ExecutionDtos.ExecutionPageResponse.from(
+                executionService.history(workflowId, status, page, size));
+    }
+
     @GetMapping("/executions/{executionId}")
     public ExecutionDtos.ExecutionResponse get(@PathVariable Long executionId) {
         return ExecutionDtos.ExecutionResponse.from(executionService.get(executionId));

@@ -7,6 +7,9 @@ import com.flowforge.workflow.WorkflowDefinition;
 import com.flowforge.workflow.WorkflowRepository;
 import com.flowforge.workflow.WorkflowStatus;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -96,6 +99,27 @@ public class ExecutionService {
         execution.setNextAttemptAt(null);
         execution.setFinishedAt(Instant.now(clock));
         return executionRepository.saveAndFlush(execution);
+    }
+
+    /**
+     * Return a bounded, deterministic history for a single workflow. Mapping
+     * entities to DTOs inside the read transaction avoids lazy-loading during
+     * JSON serialization when open-in-view is disabled.
+     */
+    public Page<ExecutionDtos.ExecutionResponse> history(
+            Long workflowId, ExecutionStatus status, int page, int size) {
+        if (page < 0 || size < 1 || size > 100) {
+            throw new BadRequestException("page must be >= 0 and size must be between 1 and 100");
+        }
+        if (!workflowRepository.existsById(workflowId)) {
+            throw new NotFoundException("Workflow not found: " + workflowId);
+        }
+        var pageable = PageRequest.of(page, size, Sort.by(
+                Sort.Order.desc("createdAt"), Sort.Order.desc("id")));
+        Page<WorkflowExecution> executions = status == null
+                ? executionRepository.findHistoryByWorkflowId(workflowId, pageable)
+                : executionRepository.findHistoryByWorkflowIdAndStatus(workflowId, status, pageable);
+        return executions.map(ExecutionDtos.ExecutionResponse::from);
     }
 
     public WorkflowExecution get(Long executionId) {

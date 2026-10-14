@@ -198,3 +198,13 @@ the test accepts only a localhost database named `flowforge_ci`.
 7. CI, security/config hardening, sample workflows, documentation and final polish
 
 See [docs/architecture.md](docs/architecture.md).
+
+## Bounded workflow listing
+
+`GET /api/v1/workflows?limit=20` returns the newest workflows first, ordered by
+`createdAt DESC, id DESC` to break timestamp ties. The optional `limit`
+defaults to **100** and must be between **1 and 100**; invalid limits return
+HTTP 400. This bounds database reads and response construction for workflows
+with large numbers of saved definitions and tasks. The result remains a JSON
+array for backward compatibility. A future cursor-based endpoint can add
+navigation beyond the first 100 records.

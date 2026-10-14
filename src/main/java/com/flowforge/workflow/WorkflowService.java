@@ -4,6 +4,8 @@ import com.flowforge.common.BadRequestException;
 import com.flowforge.common.ConflictException;
 import com.flowforge.common.NotFoundException;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -52,7 +54,20 @@ public class WorkflowService {
     }
 
     public List<WorkflowDtos.WorkflowResponse> list() {
-        return repository.findAll().stream()
+        return list(100);
+    }
+
+    /**
+     * Bound list queries so the API cannot materialize an unbounded number of
+     * workflows (and their task definitions) into one response.
+     */
+    public List<WorkflowDtos.WorkflowResponse> list(int limit) {
+        if (limit < 1 || limit > 100) {
+            throw new BadRequestException("limit must be between 1 and 100");
+        }
+        var firstPage = PageRequest.of(0, limit,
+                Sort.by(Sort.Order.desc("createdAt"), Sort.Order.desc("id")));
+        return repository.findAll(firstPage).getContent().stream()
                 .map(WorkflowDtos.WorkflowResponse::from)
                 .toList();
     }

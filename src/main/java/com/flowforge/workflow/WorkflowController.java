@@ -22,8 +22,9 @@ public class WorkflowController {
     }
 
     @GetMapping
-    public List<WorkflowDtos.WorkflowResponse> list() {
-        return workflowService.list();
+    public List<WorkflowDtos.WorkflowResponse> list(
+            @RequestParam(defaultValue = "100") int limit) {
+        return workflowService.list(limit);
     }
 
     @GetMapping("/{id}")

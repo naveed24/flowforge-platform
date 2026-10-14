@@ -149,6 +149,35 @@ class WorkflowServiceIntegrationTest {
         assertThat(persisted.status()).isEqualTo(WorkflowStatus.ACTIVE);
     }
 
+    @Test
+    void listsLatestWorkflowsWithDeterministicBoundedResults() {
+        String suffix = Long.toString(System.nanoTime());
+        var first = workflowService.create(createRequest("bounded-first-" + suffix));
+        var second = workflowService.create(createRequest("bounded-second-" + suffix));
+        var third = workflowService.create(createRequest("bounded-third-" + suffix));
+
+        var latest = workflowService.list(2);
+        assertThat(latest).hasSize(2);
+        assertThat(latest).extracting(WorkflowDtos.WorkflowResponse::id)
+                .containsExactly(third.id(), second.id());
+        assertThat(latest).extracting(WorkflowDtos.WorkflowResponse::id)
+                .doesNotContain(first.id());
+
+        assertThat(workflowService.list()).hasSizeLessThanOrEqualTo(100);
+    }
+
+    @Test
+    void rejectsInvalidWorkflowListLimits() {
+        assertThatThrownBy(() -> workflowService.list(0))
+                .isInstanceOf(BadRequestException.class)
+                .hasMessageContaining("between 1 and 100");
+        assertThatThrownBy(() -> workflowService.list(101))
+                .isInstanceOf(BadRequestException.class)
+                .hasMessageContaining("between 1 and 100");
+        assertThatThrownBy(() -> workflowService.list(-5))
+                .isInstanceOf(BadRequestException.class);
+    }
+
     private WorkflowDtos.CreateWorkflowRequest createRequest(String name) {
         return new WorkflowDtos.CreateWorkflowRequest(
                 name,

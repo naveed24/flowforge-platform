@@ -14,6 +14,12 @@ class RedisWorkerLeaseValidationTest {
                 .isInstanceOf(IllegalArgumentException.class);
         assertThatThrownBy(() -> leases.tryAcquire(1, " "))
                 .isInstanceOf(IllegalArgumentException.class);
+        var releaser = new RedisLeaseReleaser(redis);
+        for (var lease : new WorkerLease[] {null, new WorkerLease(0, "worker", "token"),
+                new WorkerLease(1, " ", "token"), new WorkerLease(1, "worker", " ")}) {
+            assertThatThrownBy(() -> leases.renew(lease)).isInstanceOf(IllegalArgumentException.class);
+            assertThatThrownBy(() -> releaser.release(lease)).isInstanceOf(IllegalArgumentException.class);
+        }
         verifyNoInteractions(redis);
     }
 }

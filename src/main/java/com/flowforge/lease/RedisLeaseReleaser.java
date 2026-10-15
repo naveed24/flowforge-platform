@@ -13,6 +13,7 @@ public class RedisLeaseReleaser {
     }
 
     public boolean release(WorkerLease lease) {
+        RedisWorkerLeaseService.validateLease(lease);
         Long ok = redis.execute(RedisLeaseScripts.RELEASE,
                 List.of("flowforge:execution:lease:" + lease.executionId()), lease.token());
         return Long.valueOf(1).equals(ok);

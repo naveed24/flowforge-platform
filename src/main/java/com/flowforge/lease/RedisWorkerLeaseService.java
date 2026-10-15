@@ -28,9 +28,17 @@ public class RedisWorkerLeaseService {
     }
 
     public boolean renew(WorkerLease lease) {
+        validateLease(lease);
         Long ok = redis.execute(RedisLeaseScripts.RENEW,
                 List.of(key(lease.executionId())), lease.token(), "30000");
         return Long.valueOf(1).equals(ok);
+    }
+
+    static void validateLease(WorkerLease lease) {
+        if (lease == null || lease.executionId() <= 0 || lease.workerId() == null
+                || lease.workerId().isBlank() || lease.token() == null || lease.token().isBlank()) {
+            throw new IllegalArgumentException("Invalid worker lease");
+        }
     }
 
     private String key(long id) {

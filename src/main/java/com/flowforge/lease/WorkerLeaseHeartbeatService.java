@@ -22,8 +22,8 @@ public class WorkerLeaseHeartbeatService implements DisposableBean {
     public WorkerLeaseHeartbeatService(
             RedisWorkerLeaseService leases,
             @Value("${flowforge.worker.lease.ttl-ms:30000}") long ttlMillis,
-            @Value("${flowforge.worker.lease.heartbeat-interval-ms:10000}") long intervalMillis) {
-        this(leases, ttlMillis, intervalMillis, Executors.newScheduledThreadPool(2, r -> {
+            @Value("${flowforge.worker.lease.heartbeat-interval-ms:-1}") long intervalMillis) {
+        this(leases, ttlMillis, intervalMillis == -1 ? ttlMillis / 3 : intervalMillis, Executors.newScheduledThreadPool(2, r -> {
             Thread thread = new Thread(r, "flowforge-worker-lease-heartbeat");
             thread.setDaemon(true);
             return thread;

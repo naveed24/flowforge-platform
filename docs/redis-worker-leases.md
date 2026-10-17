@@ -20,7 +20,8 @@ failure, including Redis unavailability, permanently deactivates the handle
 and invokes `onLeaseLost` at most once. The callback must promptly stop
 processing; `isActive()` can be checked before further work.
 
-The default heartbeat interval is 10000 ms. Configure
+By default the heartbeat interval is one third of the configured TTL
+(10000 ms with the default 30000 ms TTL). Configure
 `flowforge.worker.lease.heartbeat-interval-ms` (environment
 `FLOWFORGE_WORKER_LEASE_HEARTBEAT_INTERVAL_MS`) when changing the TTL.
 The interval must be >= 100 ms and <= one third of the TTL. Invalid

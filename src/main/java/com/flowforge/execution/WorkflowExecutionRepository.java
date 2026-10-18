@@ -59,6 +59,26 @@ public interface WorkflowExecutionRepository extends JpaRepository<WorkflowExecu
             @Param("running") ExecutionStatus running,
             @Param("now") Instant now);
 
+    /**
+     * Attempt-fenced completion. Does not validate Redis lease ownership.
+     */
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
+    @Transactional
+    @Query("""
+            update WorkflowExecution e
+            set e.status = :target, e.nextAttemptAt = :nextAttemptAt,
+                e.finishedAt = :finishedAt, e.version = e.version + 1
+            where e.id = :id and e.status = :running
+              and e.attemptCount = :expectedAttempt
+            """)
+    int completeRunningAttempt(
+            @Param("id") Long id,
+            @Param("expectedAttempt") int expectedAttempt,
+            @Param("running") ExecutionStatus running,
+            @Param("target") ExecutionStatus target,
+            @Param("nextAttemptAt") Instant nextAttemptAt,
+            @Param("finishedAt") Instant finishedAt);
+
     @Query("""
             select e.id from WorkflowExecution e
             where e.status = :status and e.nextAttemptAt <= :now

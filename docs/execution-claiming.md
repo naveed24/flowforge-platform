@@ -1,24 +1,45 @@
-# Atomic execution claiming
+# Atomic worker claims and attempt-fenced completion
 
-`ExecutionClaimService.claimNextQueued()` is an internal worker-facing primitive
-for moving an execution from `QUEUED` to `RUNNING`. It is not an HTTP endpoint
-and does not run tasks or dispatch messages.
+FlowForge exposes internal worker-facing primitives for **future Kafka
+at-least-once delivery**. They do not run DAG tasks or publish Kafka messages.
 
-- Scan up to 100 oldest queued executions per call.
-- Claim with a single conditional database update. Concurrent claimers cannot
-  both transition the same row; a cancellation cannot be resurrected.
-- Increment `attempt_count` and the optimistic `version`, set `started_at`,
-  and clear `next_attempt_at` in the same transaction.
-- Never claim `RETRY_WAIT` directly: the retry scheduler must requeue due
-  attempts first. Exhausted attempts are not claimable.
-- Return an empty result if no candidate wins the race. Workers may poll again.
+## Claiming a queued execution
 
-**Delivery limitations:** This is a state-transition primitive, not a complete
-distributed worker protocol. There is no Kafka dispatch, Redis lease, heartbeat,
-automatic reclaim after worker crashes, or task execution yet. Do not enable
-unbounded worker polling until delivery, lease recovery, and observability are
-implemented. A claimed execution can remain `RUNNING` if its worker dies.
+- `ExecutionClaimService.claimQueuedById(executionId)` targets one persisted
+  execution ID. It atomically transitions only a `QUEUED` row to `RUNNING`.
+  Duplicate deliveries, cancellation, terminal and retry-waiting rows return
+  empty.
+- `claimNextQueued()` remains a bounded oldest-first fallback, scanning up
+  to 100 candidates per call.
+- Both use the same conditional SQL update: increment `attempt_count` and
+  optimistic `version`, set `started_at` and clear `next_attempt_at`.
+  Only one competing claim can win.
+- Never claim `RETRY_WAIT` directly. The retry scheduler requeues due rows;
+  exhausted attempts are not claimable.
 
-The H2 integration tests cover oldest-first claiming, exclusion of cancelled and
-retry-waiting executions, and concurrent contenders. The existing CI runs Maven
-tests and separately validates PostgreSQL Flyway migrations.
+## Completing the claimed attempt
+
+Retain the **one-based attempt number** returned by the successful claim.
+`ExecutionAttemptCompletionService.succeed(id, attempt)` and
+`fail(id, attempt)` return true only if a conditional database update
+transitions that exact `RUNNING` attempt. Missing, cancelled, duplicate,
+and stale attempts return false without changing state.
+
+Failure persists `RETRY_WAIT` and exponential backoff when attempts remain,
+or terminal `FAILED` and `finished_at` when exhausted. Success persists
+`SUCCEEDED` and `finished_at`. Both increment optimistic `version`.
+Do not refresh the attempt number from the database to complete older work.
+
+## Delivery limitations
+
+Attempt fencing distinguishes **retry generations**, not worker ownership.
+If a Redis lease expires while the database still says `RUNNING`, its former
+owner can still complete that same attempt. Redis lease heartbeats and
+token-checked release exist as separate primitives but are not yet wired
+into task execution. Before enabling distributed workers, integrate lease
+ownership, cooperative cancellation, crash recovery and fencing for external
+side effects. Kafka dispatch, outbox and task execution are not implemented;
+a claimed execution can remain `RUNNING` after a worker crash.
+
+H2 integration tests cover targeted claims, duplicate delivery, cancellation,
+stale completions across retries and retry exhaustion.

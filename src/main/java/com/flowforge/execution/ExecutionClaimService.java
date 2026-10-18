@@ -26,6 +26,17 @@ public class ExecutionClaimService {
      * Safe across multiple application instances: a conditional SQL UPDATE is
      * the claim's linearization point. Never returns an already-running job.
      */
+    /** Claim one queued execution addressed by an at-least-once delivery. */
+    @Transactional
+    public Optional<WorkflowExecution> claimQueuedById(long executionId) {
+        if (executionId <= 0 || repository.claimQueuedExecution(
+                executionId, ExecutionStatus.QUEUED, ExecutionStatus.RUNNING,
+                clock.instant()) != 1) {
+            return Optional.empty();
+        }
+        return repository.findById(executionId);
+    }
+
     @Transactional
     public Optional<WorkflowExecution> claimNextQueued() {
         var candidates = repository.findClaimableQueuedIds(

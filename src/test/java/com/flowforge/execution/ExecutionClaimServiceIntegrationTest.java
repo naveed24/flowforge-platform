@@ -27,10 +27,13 @@ class ExecutionClaimServiceIntegrationTest {
     @Autowired private ExecutionService executionService;
     @Autowired private ExecutionClaimService claimService;
     @Autowired private WorkflowExecutionRepository executionRepository;
+    @Autowired private ExecutionDispatchOutboxRepository outboxRepository;
 
     @BeforeEach
     void clearPreviousExecutions() {
         // H2 test contexts are reused by other integration test classes.
+        // Dispatch intents reference executions; clear children before parents.
+        outboxRepository.deleteAllInBatch();
         executionRepository.deleteAll();
     }
 

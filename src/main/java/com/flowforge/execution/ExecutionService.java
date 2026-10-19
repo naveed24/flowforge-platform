@@ -22,6 +22,7 @@ import java.time.Instant;
 public class ExecutionService {
 
     private final WorkflowExecutionRepository executionRepository;
+    private final ExecutionDispatchOutboxService dispatchOutboxService;
     private final WorkflowRepository workflowRepository;
     private final Clock clock;
 
@@ -37,13 +38,15 @@ public class ExecutionService {
         if (workflow.getStatus() != WorkflowStatus.ACTIVE) {
             throw new BadRequestException("Only active workflows can be executed");
         }
-        return executionRepository.saveAndFlush(WorkflowExecution.builder()
+        WorkflowExecution execution = executionRepository.saveAndFlush(WorkflowExecution.builder()
                 .workflow(workflow)
                 .idempotencyKey(idempotencyKey)
                 .status(ExecutionStatus.QUEUED)
                 .attemptCount(0)
                 .maxAttempts(RetryBackoffPolicy.DEFAULT_MAX_ATTEMPTS)
                 .build());
+        dispatchOutboxService.recordForNextAttempt(execution);
+        return execution;
     }
 
     @Transactional

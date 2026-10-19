@@ -3,6 +3,7 @@ package com.flowforge.execution;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Clock;
 
@@ -17,8 +18,10 @@ public class DueRetryService {
     private static final int BATCH_SIZE = 100;
 
     private final WorkflowExecutionRepository repository;
+    private final ExecutionDispatchOutboxService dispatchOutboxService;
     private final Clock clock;
 
+    @Transactional
     public int requeueDueRetries() {
         var now = clock.instant();
         var ids = repository.findDueRetryIds(
@@ -26,8 +29,13 @@ public class DueRetryService {
 
         int requeued = 0;
         for (Long id : ids) {
-            requeued += repository.requeueDueRetry(
-                    id, ExecutionStatus.RETRY_WAIT, ExecutionStatus.QUEUED, now);
+            if (repository.requeueDueRetry(
+                    id, ExecutionStatus.RETRY_WAIT, ExecutionStatus.QUEUED, now) == 1) {
+                // The conditional update holds the row lock until commit, so
+                // a competing poller cannot create a second event.
+                dispatchOutboxService.recordForNextAttempt(repository.findById(id).orElseThrow());
+                requeued++;
+            }
         }
         return requeued;
     }

@@ -178,6 +178,14 @@ transaction rolls back, and never hides other database integrity failures.
 must claim and start queued executions. Distributed worker leases, task
 execution, remain future milestones.
 
+## Durable dispatch intent (transactional outbox)
+
+New executions and due retry requeues now persist an outbox event in the same
+database transaction as their `QUEUED` state. Flyway V7 also backfills
+currently queued runs from existing deployments. Kafka publishing is **not
+enabled yet**; events remain pending until a broker-acknowledged dispatcher
+is implemented. See [dispatch outbox design](docs/execution-dispatch-outbox.md).
+
 ## CI verification
 
 GitHub Actions runs the Spring/H2 unit and integration tests, plus a real

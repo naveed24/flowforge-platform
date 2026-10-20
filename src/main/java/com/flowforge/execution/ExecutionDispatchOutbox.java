@@ -14,8 +14,8 @@ import java.util.Objects;
  */
 @Entity
 @Table(name = "execution_dispatch_outbox",
-        indexes = @Index(name = "idx_execution_dispatch_outbox_pending",
-                columnList = "published_at,id"),
+        indexes = {@Index(name = "idx_execution_dispatch_outbox_pending", columnList = "published_at,id"),
+                @Index(name = "idx_execution_dispatch_outbox_claimable", columnList = "published_at,next_publish_at,claimed_until,id")},
         uniqueConstraints = @UniqueConstraint(name = "uq_execution_dispatch_outbox_attempt",
                 columnNames = {"execution_id", "attempt_number"}))
 @Getter
@@ -38,6 +38,21 @@ public class ExecutionDispatchOutbox {
 
     @Column(name = "published_at")
     private Instant publishedAt;
+
+    @Column(name = "claim_token")
+    private java.util.UUID claimToken;
+
+    @Column(name = "claimed_until")
+    private Instant claimedUntil;
+
+    @Column(name = "next_publish_at")
+    private Instant nextPublishAt;
+
+    @Column(name = "publish_attempts", nullable = false)
+    private int publishAttempts;
+
+    @Column(name = "last_error", length = 120)
+    private String lastError;
 
     public ExecutionDispatchOutbox(WorkflowExecution execution, int attemptNumber, Instant createdAt) {
         if (attemptNumber < 1) {

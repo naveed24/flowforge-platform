@@ -25,19 +25,51 @@ terminal executions.
 - `ExecutionDispatchOutboxService` requires an existing transaction, rather
   than silently committing an outbox row independently.
 
-## Next: Kafka publication
+## Kafka publication (opt-in)
 
-**This slice does not publish Kafka messages or start workers.** Rows remain
-pending (`published_at IS NULL`) until a future dispatcher is implemented.
-The dispatcher must claim pending records safely across instances, publish
-`executionId` and `attemptNumber` using a stable Kafka message key, wait
-for broker acknowledgment, then mark publication complete. A crash after Kafka
-acknowledgment but before the database update can produce duplicates; the
-worker must use `claimQueuedById` and the attempt-fenced completion API to
-make duplicate deliveries harmless. Publication is **at-least-once**, not
-exactly-once. A stale queued event must not resurrect cancelled or already
-running work. Worker lease ownership and external side-effect fencing remain
-separate requirements before running untrusted tasks.
+Flyway V8 adds an expiring, token-fenced outbox claim, a publish-attempt counter,
+retry timestamp and a bounded error class. Each polling cycle:
 
-Tests verify initial and idempotent submissions, retry requeue, cancellation,
-retry exhaustion, and PostgreSQL migration schema.
+1. Scans at most 100 eligible rows, then atomically claims a row with a random
+   UUID token and a 60-second lease. Concurrent instances cannot claim the same
+   row until that lease expires. Claims commit **before** Kafka I/O.
+2. Sends a JSON `ExecutionDispatchMessage(executionId, attemptNumber, outboxId)`
+   to `flowforge.execution.dispatch.v1` with the execution ID as the Kafka
+   partition key. The producer uses `acks=all` and idempotence.
+3. Waits for the broker acknowledgment (default timeout 10 seconds) before
+   conditionally setting `published_at` and clearing the claim. Only the
+   current claim token may acknowledge or release a row.
+4. On a send failure, releases the claim with exponential publication backoff
+   (5, 10, 20 ... up to 300 seconds). A crash or database outage leaves a
+   pending row for reclaim after the lease expires. Failures do not discard
+   the dispatch intent.
+
+The publisher is **disabled by default**. Provision a Kafka broker and the
+`flowforge.execution.dispatch.v1` topic first, then set
+`FLOWFORGE_DISPATCH_ENABLED=true` and
+`KAFKA_BOOTSTRAP_SERVERS=host:9092`. Optionally configure
+`FLOWFORGE_DISPATCH_TOPIC`. Application properties under
+`flowforge.execution.dispatch` control the bounded batch size, lease duration,
+ack timeout and polling interval. The acknowledgment timeout must be less than
+the claim lease; otherwise startup rejects the configuration.
+
+**At-least-once guarantee, not exactly-once:** a process can crash after Kafka
+acknowledges but before the database marks publication complete. The message
+may then be republished. Consumers **must** call
+`ExecutionClaimService.claimQueuedById(executionId, attemptNumber)`, not the
+legacy ID-only claim method. The attempt-aware conditional database update
+rejects duplicates, cancellations and stale events from prior retries even
+when a later attempt is now queued. Completion must likewise use the returned
+attempt number. These safeguards do not fence external side effects.
+
+**Scope boundary:** this milestone publishes durable dispatch events, but does
+not consume Kafka messages, execute DAG tasks, or integrate Redis lease
+ownership into task execution. Do not treat a published event as completed
+work. Topic provisioning, worker consumers, crash recovery for RUNNING jobs,
+dead-letter handling, metrics and external side-effect fencing are future
+milestones. If Kafka is unavailable, pending outbox rows accumulate rather
+than being lost.
+
+Tests cover broker-acknowledged publication, publish failure/backoff, expired
+lease reclamation, stale token fencing, retry-generation fencing and the
+PostgreSQL migration.

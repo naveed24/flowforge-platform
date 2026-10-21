@@ -60,6 +60,26 @@ public interface WorkflowExecutionRepository extends JpaRepository<WorkflowExecu
             @Param("now") Instant now);
 
     /**
+     * Reject stale Kafka messages from earlier retry generations.
+     */
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
+    @Transactional
+    @Query("""
+            update WorkflowExecution e
+            set e.status = :running, e.attemptCount = e.attemptCount + 1,
+                e.startedAt = :now, e.nextAttemptAt = null, e.version = e.version + 1
+            where e.id = :id and e.status = :queued
+              and e.attemptCount = :previousAttempt
+              and e.attemptCount < e.maxAttempts
+            """)
+    int claimQueuedExecutionForAttempt(
+            @Param("id") Long id,
+            @Param("previousAttempt") int previousAttempt,
+            @Param("queued") ExecutionStatus queued,
+            @Param("running") ExecutionStatus running,
+            @Param("now") Instant now);
+
+    /**
      * Attempt-fenced completion. Does not validate Redis lease ownership.
      */
     @Modifying(clearAutomatically = true, flushAutomatically = true)

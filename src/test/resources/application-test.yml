@@ -21,3 +21,5 @@ flowforge:
   execution:
     retry:
       polling-enabled: false
+    dispatch:
+      enabled: false

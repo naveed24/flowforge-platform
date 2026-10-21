@@ -37,6 +37,21 @@ public class ExecutionClaimService {
         return repository.findById(executionId);
     }
 
+    /**
+     * Kafka consumers must supply the event's attempt. A delayed event for
+     * attempt N must not claim a newly queued attempt N+1.
+     */
+    @Transactional
+    public Optional<WorkflowExecution> claimQueuedById(long executionId, int expectedAttempt) {
+        if (executionId <= 0 || expectedAttempt <= 0
+                || repository.claimQueuedExecutionForAttempt(
+                executionId, expectedAttempt - 1, ExecutionStatus.QUEUED,
+                ExecutionStatus.RUNNING, clock.instant()) != 1) {
+            return Optional.empty();
+        }
+        return repository.findById(executionId);
+    }
+
     @Transactional
     public Optional<WorkflowExecution> claimNextQueued() {
         var candidates = repository.findClaimableQueuedIds(

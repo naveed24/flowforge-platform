@@ -30,7 +30,7 @@ class PostgresFlywayMigrationTest {
 
         Flyway flyway = Flyway.configure().dataSource(url, username, password).load();
         flyway.migrate();
-        assertThat(flyway.info().current().getVersion().getVersion()).isEqualTo("7");
+        assertThat(flyway.info().current().getVersion().getVersion()).isEqualTo("8");
 
         try (Connection connection = DriverManager.getConnection(url, username, password)) {
             assertThat(hasColumn(connection, "workflows", "schedule_type")).isTrue();
@@ -46,6 +46,9 @@ class PostgresFlywayMigrationTest {
             assertThat(hasColumn(connection, "execution_dispatch_outbox", "published_at")).isTrue();
             assertThat(hasIndex(connection, "uq_execution_dispatch_outbox_attempt")).isTrue();
             assertThat(hasIndex(connection, "idx_execution_dispatch_outbox_pending")).isTrue();
+            assertThat(hasColumn(connection, "execution_dispatch_outbox", "claim_token")).isTrue();
+            assertThat(hasColumn(connection, "execution_dispatch_outbox", "claimed_until")).isTrue();
+            assertThat(hasIndex(connection, "idx_execution_dispatch_outbox_claimable")).isTrue();
         }
     }
 

@@ -15,6 +15,16 @@ spring:
   flyway:
     enabled: true
 
+  kafka:
+    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.springframework.kafka.support.serializer.JacksonJsonSerializer
+      acks: all
+      properties:
+        enable.idempotence: true
+        max.in.flight.requests.per.connection: 5
+
   data:
     redis:
       host: ${REDIS_HOST:localhost}
@@ -33,3 +43,14 @@ management:
 server:
   port: ${SERVER_PORT:8081}
   shutdown: graceful
+
+flowforge:
+  execution:
+    dispatch:
+      enabled: ${FLOWFORGE_DISPATCH_ENABLED:false}
+      topic: ${FLOWFORGE_DISPATCH_TOPIC:flowforge.execution.dispatch.v1}
+      batch-size: 25
+      claim-lease-ms: 60000
+      ack-timeout-ms: 10000
+      poll-interval-ms: 2000
+      poll-initial-delay-ms: 5000

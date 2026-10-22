@@ -115,6 +115,51 @@ class ExecutionDispatchPublisherIntegrationTest {
     }
 
     @Test
+    void expiredClaimCannotAcknowledgeOrScheduleRetryWithoutReclaim() {
+        long id = executions.enqueue(activeWorkflow()).getId();
+        var first = dispatchClaims.claimNext().orElseThrow();
+        var before = outbox.findByExecution_IdOrderByAttemptNumberAsc(id).getFirst();
+        assertThat(before.getClaimToken()).isEqualTo(first.token());
+
+        // At the exact lease deadline, token possession no longer grants ownership.
+        clock.advance(Duration.ofSeconds(60));
+        assertThat(dispatchClaims.markPublished(first)).isFalse();
+        assertThat(dispatchClaims.releaseForRetry(first, "LateFailure")).isFalse();
+
+        var pending = outbox.findByExecution_IdOrderByAttemptNumberAsc(id).getFirst();
+        assertThat(pending.getPublishedAt()).isNull();
+        assertThat(pending.getClaimToken()).isEqualTo(first.token());
+        assertThat(pending.getLastError()).isNull();
+        assertThat(pending.getNextPublishAt()).isNull();
+
+        var replacement = dispatchClaims.claimNext().orElseThrow();
+        assertThat(replacement.token()).isNotEqualTo(first.token());
+        assertThat(dispatchClaims.markPublished(replacement)).isTrue();
+    }
+
+    @Test
+    void lateKafkaAcknowledgmentCannotMarkExpiredDispatchPublished() {
+        long id = executions.enqueue(activeWorkflow()).getId();
+        // Use one message per cycle so an expired row is not reclaimed in the same batch.
+        var oneMessagePublisher = new ExecutionDispatchPublisher(dispatchClaims, kafka,
+                "flowforge.execution.dispatch.v1", 10000, 60000, 1);
+        when(kafka.send(eq("flowforge.execution.dispatch.v1"), eq(Long.toString(id)),
+                any(ExecutionDispatchMessage.class))).thenAnswer(invocation -> {
+                    clock.advance(Duration.ofSeconds(60));
+                    return CompletableFuture.completedFuture(null);
+                });
+
+        assertThat(oneMessagePublisher.publishPendingBatch()).isZero();
+        var pending = outbox.findByExecution_IdOrderByAttemptNumberAsc(id).getFirst();
+        assertThat(pending.getPublishedAt()).isNull();
+        assertThat(pending.getClaimToken()).isNotNull();
+
+        var recovered = dispatchClaims.claimNext().orElseThrow();
+        assertThat(recovered.outboxId()).isEqualTo(pending.getId());
+        assertThat(dispatchClaims.markPublished(recovered)).isTrue();
+    }
+
+    @Test
     void oldAttemptMessageCannotClaimRequeuedExecution() {
         long id = executions.enqueue(activeWorkflow()).getId();
         assertThat(executionClaims.claimQueuedById(id, 1)).isPresent();

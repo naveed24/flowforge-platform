@@ -65,7 +65,8 @@ public class ExecutionDispatchClaimService {
         long shift = Math.min(Math.max(claim.publishAttempts() - 1, 0), 6);
         Duration backoff = Duration.ofSeconds(Math.min(300L, 5L << shift));
         String safeError = errorClass.substring(0, Math.min(120, errorClass.length()));
+        Instant now = clock.instant();
         return repository.releaseForRetry(claim.outboxId(), claim.token(),
-                clock.instant().plus(backoff), safeError) == 1;
+                now, now.plus(backoff), safeError) == 1;
     }
 }

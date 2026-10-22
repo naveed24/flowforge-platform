@@ -45,6 +45,7 @@ public interface ExecutionDispatchOutboxRepository extends JpaRepository<Executi
             set o.publishedAt = :now, o.claimToken = null, o.claimedUntil = null,
                 o.nextPublishAt = null, o.lastError = null
             where o.id = :id and o.claimToken = :token and o.publishedAt is null
+              and o.claimedUntil > :now
             """)
     int acknowledge(@Param("id") Long id, @Param("token") UUID token,
                     @Param("now") Instant now);
@@ -56,9 +57,11 @@ public interface ExecutionDispatchOutboxRepository extends JpaRepository<Executi
             set o.claimToken = null, o.claimedUntil = null,
                 o.nextPublishAt = :retryAt, o.lastError = :error
             where o.id = :id and o.claimToken = :token and o.publishedAt is null
+              and o.claimedUntil > :now
             """)
     int releaseForRetry(@Param("id") Long id, @Param("token") UUID token,
-                        @Param("retryAt") Instant retryAt, @Param("error") String error);
+                        @Param("now") Instant now, @Param("retryAt") Instant retryAt,
+                        @Param("error") String error);
 
     /** Bounded, oldest-first pending events for a future Kafka publisher. */
     List<ExecutionDispatchOutbox> findByPublishedAtIsNullOrderByIdAsc(Pageable pageable);

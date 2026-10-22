@@ -38,11 +38,13 @@ retry timestamp and a bounded error class. Each polling cycle:
    partition key. The producer uses `acks=all` and idempotence.
 3. Waits for the broker acknowledgment (default timeout 10 seconds) before
    conditionally setting `published_at` and clearing the claim. Only the
-   current claim token may acknowledge or release a row.
+   current claim token **with an unexpired lease** may acknowledge or release
+   a row. At the exact lease expiry instant, the claim is no longer valid.
 4. On a send failure, releases the claim with exponential publication backoff
    (5, 10, 20 ... up to 300 seconds). A crash or database outage leaves a
-   pending row for reclaim after the lease expires. Failures do not discard
-   the dispatch intent.
+   pending row for reclaim after the lease expires. Failure callbacks from an
+   expired claim cannot reschedule retries or overwrite that row. Failures do
+   not discard the dispatch intent.
 
 The publisher is **disabled by default**. Provision a Kafka broker and the
 `flowforge.execution.dispatch.v1` topic first, then set
@@ -71,5 +73,6 @@ milestones. If Kafka is unavailable, pending outbox rows accumulate rather
 than being lost.
 
 Tests cover broker-acknowledged publication, publish failure/backoff, expired
-lease reclamation, stale token fencing, retry-generation fencing and the
+lease reclamation, expired-token acknowledgment/retry rejection, late Kafka
+acknowledgment fencing, stale token fencing, retry-generation fencing and the
 PostgreSQL migration.

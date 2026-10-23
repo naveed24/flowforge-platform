@@ -21,7 +21,7 @@ FlowForge is a production-style distributed workflow and background-job orchestr
 - Spring Data JPA
 - PostgreSQL + Flyway
 - Redis
-- Kafka (opt-in outbox publication; worker consumer still planned)
+- Kafka (opt-in outbox publication and NOOP-only worker consumer)
 - Micrometer + Prometheus
 - Docker / Docker Compose
 - React (planned dashboard)
@@ -182,7 +182,7 @@ execution, remain future milestones.
 
 New executions and due retry requeues now persist an outbox event in the same
 database transaction as their `QUEUED` state. Flyway V7 also backfills
-currently queued runs from existing deployments. Kafka publication is **opt-in and disabled by default**. Flyway V8 adds token-fenced, expiring outbox claims, broker-acknowledged publication, and bounded backoff after failures. Set `FLOWFORGE_DISPATCH_ENABLED=true` and `KAFKA_BOOTSTRAP_SERVERS=localhost:9092` after provisioning a Kafka broker and topic. Publication is at-least-once; worker consumption and task execution remain future milestones. See [dispatch outbox design](docs/execution-dispatch-outbox.md).
+currently queued runs from existing deployments. Kafka publication is **opt-in and disabled by default**. Flyway V8 adds token-fenced, expiring outbox claims, broker-acknowledged publication, and bounded backoff after failures. Set `FLOWFORGE_DISPATCH_ENABLED=true` and `KAFKA_BOOTSTRAP_SERVERS=localhost:9092` after provisioning a Kafka broker and topic. Publication is at-least-once. A disabled-by-default Kafka worker can now complete NOOP-only DAGs transactionally; other task types are not executed. See [dispatch outbox design](docs/execution-dispatch-outbox.md) and [NOOP worker operations](docs/kafka-noop-worker.md).
 
 ## CI verification
 

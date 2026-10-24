@@ -30,12 +30,32 @@ those task types with Redis lease fencing and side-effect idempotency.
 
 ## Failure behavior and limitations
 
-An invalid record or a database failure is not acknowledged. The Kafka error
-handler retries every five seconds without silently skipping the offset. This
-is fail-closed, but a poison record can block its partition until an operator
-intervenes; dead-letter routing and bounded retries are future work.
+A permanently invalid dispatch (bad execution key, missing outbox intent,
+mismatched attempt, or malformed JSON) is sent to the configured dead-letter
+topic `flowforge.execution.dispatch.v1.DLT`. The default error handler treats
+`IllegalArgumentException` and deserialization failures as non-retryable.
+The DLT publisher **waits for broker acknowledgment**; only after a successful
+send may the original offset be committed. A failed or timed-out DLT send
+does not recover the record and it is retried, rather than silently skipped.
+
+Database failures and other transient processing exceptions continue retrying
+every five seconds without a finite retry limit; a broker outage therefore
+cannot exhaust a fixed retry budget and discard legitimate work. A prolonged
+database outage can still block a Kafka partition. Monitor consumer lag and
+DLT volume. DLT records require operator investigation and explicit replay;
+the DLT is **not** automatically consumed.
+
+**Provision both Kafka topics before enabling the worker** and give the
+consumer group read access to the dispatch topic and the producer write access
+to the DLT. The DLT may have fewer partitions than the source topic because
+the broker selects its partition. Override the DLT destination with
+`FLOWFORGE_WORKER_DLT_TOPIC` when using a custom dispatch topic
+(`FLOWFORGE_DISPATCH_TOPIC`). DLT records preserve their original key and
+payload, including raw bytes for malformed JSON, plus Spring Kafka error
+headers. Avoid routing DLT messages back to the dispatch topic.
 
 Kafka broker integration is not part of the in-process test suite. Tests cover
 transactional NOOP completion, duplicate delivery, unsupported-task retries,
-outbox identity checks and acknowledgment ordering. Validate broker/topic
-provisioning, consumer permissions and topic retention before enabling.
+outbox identity checks, acknowledgment ordering, malformed payload preservation
+and dead-letter recovery behavior. Validate broker/topic provisioning, consumer
+permissions and topic retention before enabling.

@@ -14,7 +14,6 @@ import java.nio.charset.StandardCharsets;
 import java.util.concurrent.CompletableFuture;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.*;
 
@@ -79,9 +78,10 @@ class WorkerKafkaDeadLetterTest {
         var record = new ConsumerRecord<>("flowforge.execution.dispatch.v1", 0, 13L,
                 "bad-key", new ExecutionDispatchMessage(10, 1, 100));
 
-        assertThatThrownBy(() -> handler.handleOne(new IllegalArgumentException("invalid key"),
-                record, mock(Consumer.class), mock(MessageListenerContainer.class)))
-                .isInstanceOf(RuntimeException.class);
+        // The handler logs the failed recovery and returns false so the
+        // container redelivers the original offset instead of committing it.
+        assertThat(handler.handleOne(new IllegalArgumentException("invalid key"),
+                record, mock(Consumer.class), mock(MessageListenerContainer.class))).isFalse();
         verify(kafka).send(any(ProducerRecord.class));
     }
 }

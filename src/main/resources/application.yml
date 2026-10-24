@@ -19,7 +19,7 @@ spring:
     bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
     producer:
       key-serializer: org.apache.kafka.common.serialization.StringSerializer
-      value-serializer: org.springframework.kafka.support.serializer.JacksonJsonSerializer
+      value-serializer: com.flowforge.execution.DispatchOrRawValueSerializer
       acks: all
       properties:
         enable.idempotence: true
@@ -30,8 +30,9 @@ spring:
       enable-auto-commit: false
       auto-offset-reset: earliest
       key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
-      value-deserializer: org.springframework.kafka.support.serializer.JacksonJsonDeserializer
+      value-deserializer: org.springframework.kafka.support.serializer.ErrorHandlingDeserializer
       properties:
+        spring.deserializer.value.delegate.class: org.springframework.kafka.support.serializer.JacksonJsonDeserializer
         spring.json.trusted.packages: com.flowforge.execution
         spring.json.value.default.type: com.flowforge.execution.ExecutionDispatchMessage
     listener:
@@ -71,3 +72,4 @@ flowforge:
     consumer:
       enabled: ${FLOWFORGE_WORKER_ENABLED:false}
       group-id: ${FLOWFORGE_WORKER_GROUP_ID:flowforge-workers}
+      dlt-topic: ${FLOWFORGE_WORKER_DLT_TOPIC:flowforge.execution.dispatch.v1.DLT}

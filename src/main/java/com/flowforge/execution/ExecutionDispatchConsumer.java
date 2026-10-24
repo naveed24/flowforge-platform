@@ -24,14 +24,18 @@ public class ExecutionDispatchConsumer {
             groupId = "${flowforge.worker.consumer.group-id:flowforge-workers}")
     public void onMessage(ConsumerRecord<String, ExecutionDispatchMessage> record,
                           Acknowledgment acknowledgment) {
-        if (record == null || record.value() == null
-                || !Long.toString(record.value().executionId()).equals(record.key())) {
-            throw new IllegalArgumentException("Dispatch key must match execution ID");
+        if (record == null || record.value() == null) {
+            throw new IllegalArgumentException("Dispatch record and payload are required");
         }
-        var outcome = worker.process(record.value());
+        var event = record.value();
+        if (event.executionId() <= 0 || event.attemptNumber() <= 0 || event.outboxId() <= 0
+                || !Long.toString(event.executionId()).equals(record.key())) {
+            throw new IllegalArgumentException("Invalid dispatch identity or attempt");
+        }
+        var outcome = worker.process(event);
         if (outcome == NoopWorkflowDispatchService.Outcome.UNSUPPORTED_RETRY) {
             log.warn("Unsupported tasks in execution {} attempt {}",
-                    record.value().executionId(), record.value().attemptNumber());
+                    event.executionId(), event.attemptNumber());
         }
         acknowledgment.acknowledge();
     }

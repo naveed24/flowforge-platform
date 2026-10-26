@@ -8,7 +8,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.*;
 
 class ExecutionDispatchConsumerValidationTest {
-    private final NoopWorkflowDispatchService worker = mock(NoopWorkflowDispatchService.class);
+    private final WorkerDispatchLeaseCoordinator worker = mock(WorkerDispatchLeaseCoordinator.class);
     private final Acknowledgment ack = mock(Acknowledgment.class);
     private final ExecutionDispatchConsumer consumer = new ExecutionDispatchConsumer(worker);
 

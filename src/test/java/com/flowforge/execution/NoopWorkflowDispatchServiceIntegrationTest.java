@@ -28,6 +28,7 @@ class NoopWorkflowDispatchServiceIntegrationTest {
     @Autowired private WorkflowExecutionRepository executionRepository;
     @Autowired private ExecutionDispatchOutboxRepository outbox;
     @Autowired private NoopWorkflowDispatchService worker;
+    @Autowired private WorkerDispatchLeaseCoordinator coordinator;
 
     @BeforeEach
     void clear() {
@@ -86,7 +87,7 @@ class NoopWorkflowDispatchServiceIntegrationTest {
     void listenerAcknowledgesOnlyAfterSuccessfulDatabaseProcessing() {
         long id = executions.enqueue(activeWorkflow(TaskType.NOOP)).getId();
         var event = eventFor(id);
-        var listener = new ExecutionDispatchConsumer(worker);
+        var listener = new ExecutionDispatchConsumer(coordinator);
         var ack = mock(Acknowledgment.class);
 
         listener.onMessage(record(Long.toString(id), event), ack);

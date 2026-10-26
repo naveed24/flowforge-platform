@@ -10,7 +10,8 @@ import org.springframework.kafka.support.Acknowledgment;
 import org.springframework.stereotype.Component;
 
 /**
- * Opt-in Kafka consumer. Acknowledges offsets only after database commit.
+ * Opt-in Kafka consumer. Acknowledges offsets only after committed worker
+ * processing and, when enabled, successful Redis lease verification/release.
  */
 @Component
 @RequiredArgsConstructor
@@ -18,7 +19,7 @@ import org.springframework.stereotype.Component;
         name = "enabled", havingValue = "true")
 public class ExecutionDispatchConsumer {
     private static final Logger log = LoggerFactory.getLogger(ExecutionDispatchConsumer.class);
-    private final NoopWorkflowDispatchService worker;
+    private final WorkerDispatchLeaseCoordinator worker;
 
     @KafkaListener(topics = "${flowforge.execution.dispatch.topic:flowforge.execution.dispatch.v1}",
             groupId = "${flowforge.worker.consumer.group-id:flowforge-workers}")

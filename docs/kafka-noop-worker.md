@@ -22,6 +22,31 @@ share **one PostgreSQL transaction**: if the process dies or the transaction
 fails before commit, the execution remains QUEUED and Kafka can redeliver it.
 A duplicate, cancelled or stale retry-generation event is a no-op.
 
+## Optional Redis worker lease coordination
+
+Set `FLOWFORGE_WORKER_LEASE_ENABLED=true` to wrap each Kafka dispatch in
+an existing Redis execution lease. The worker acquires ownership **before**
+entering the transactional NOOP executor, starts a heartbeat, verifies the
+token after the database transaction commits, and atomically releases its
+lease **before** acknowledging the Kafka offset. A lease held by another
+worker, failed heartbeat, failed token check, Redis outage, or lost release
+throws an exception and leaves the Kafka record unacknowledged for retry.
+This is deliberately **opt-in** so existing deployments without Redis
+continue using PostgreSQL's attempt-fenced claim as their safety boundary.
+
+The Redis lease is keyed by execution ID, not Kafka offset. Its owner is
+an instance-unique worker ID and a random token. Token-checked renew/release
+cannot delete a successor's lease. A worker whose lease expires can still
+finish a database operation: PostgreSQL's conditional attempt claim and
+transactional NOOP completion remain the source of truth. Redis leases are
+**not** monotonically increasing fencing tokens and must not be treated as
+authorization for external side effects. Future non-NOOP executors require
+their own cancellation, fencing and idempotency guarantees.
+
+Redis 7 CI exercises real contention and release around the coordinator.
+Unit tests cover acquisition failures, heartbeat loss, final token checks,
+failed releases and database exceptions. See [lease operations](redis-worker-leases.md).
+
 If a workflow includes any non-NOOP task, the attempt is recorded as failed
 through the existing retry/backoff state machine. **Do not enable this worker
 for production workflows containing JAVA, HTTP or SHELL tasks.** No external

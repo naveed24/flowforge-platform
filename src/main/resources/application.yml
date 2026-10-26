@@ -73,3 +73,4 @@ flowforge:
       enabled: ${FLOWFORGE_WORKER_ENABLED:false}
       group-id: ${FLOWFORGE_WORKER_GROUP_ID:flowforge-workers}
       dlt-topic: ${FLOWFORGE_WORKER_DLT_TOPIC:flowforge.execution.dispatch.v1.DLT}
+      lease-enabled: ${FLOWFORGE_WORKER_LEASE_ENABLED:false}

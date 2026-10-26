@@ -29,4 +29,4 @@ jobs:
           java-version: '21'
           cache: maven
       - name: Verify Redis lease ownership
-        run: mvn --batch-mode --no-transfer-progress -Dtest=RedisWorkerLeaseIntegrationTest,RedisWorkerLeaseTtlIntegrationTest test
+        run: mvn --batch-mode --no-transfer-progress -Dtest=RedisWorkerLeaseIntegrationTest,RedisWorkerLeaseTtlIntegrationTest,WorkerDispatchLeaseCoordinatorRedisIntegrationTest test

@@ -33,6 +33,23 @@ Call the token-checked releaser separately in a finally block. The loss
 callback runs on a heartbeat scheduler thread and should return promptly.
 Spring shuts down the heartbeat scheduler when the application stops.
 
+## Kafka worker integration (opt-in)
+
+The Kafka NOOP consumer can now use the lease primitive through
+`WorkerDispatchLeaseCoordinator`. Set `FLOWFORGE_WORKER_ENABLED=true` and
+`FLOWFORGE_WORKER_LEASE_ENABLED=true`, with Redis available at the configured
+host/port. The coordinator acquires before entering the database transaction,
+starts heartbeats, checks ownership after commit, and releases before Kafka
+acknowledgment. Contention or lost ownership leaves the record unacknowledged
+for retry; it does not dead-letter transient Redis failures. When leasing is
+disabled, the existing PostgreSQL attempt-fenced worker behavior is unchanged.
+
+The heartbeat callback records/logs lease loss, but it cannot interrupt a
+synchronous database call. Final token verification and conditional release
+prevent acknowledgment after known ownership loss. They do not roll back
+already-committed work. The NOOP worker is safe to redeliver because it
+performs no external side effects and database transitions are attempt-fenced.
+
 ## Limitations
 
 PostgreSQL conditional execution claims remain authoritative. Heartbeats

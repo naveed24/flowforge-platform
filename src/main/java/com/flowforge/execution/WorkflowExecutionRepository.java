@@ -126,4 +126,50 @@ public interface WorkflowExecutionRepository extends JpaRepository<WorkflowExecu
             @Param("waiting") ExecutionStatus waiting,
             @Param("queued") ExecutionStatus queued,
             @Param("now") Instant now);
+
+    /**
+     * Only NOOP-only workflows are eligible for automatic orphan recovery:
+     * the current worker has no external side effects to duplicate.
+     */
+    @Query("""
+            select e.id from WorkflowExecution e
+            where e.status = :running and e.startedAt is not null
+              and e.startedAt <= :cutoff
+              and exists (select t.id from TaskDefinition t where t.workflow = e.workflow)
+              and not exists (select t.id from TaskDefinition t
+                              where t.workflow = e.workflow and t.taskType <> :noop)
+            order by e.startedAt asc, e.id asc
+            """)
+    List<Long> findStaleNoopRunningIds(
+            @Param("running") ExecutionStatus running,
+            @Param("noop") com.flowforge.workflow.TaskType noop,
+            @Param("cutoff") Instant cutoff,
+            Pageable pageable);
+
+    /**
+     * Attempt and start-time fenced recovery. If a worker completes, an API
+     * cancellation wins, or another poller recovers first, no row changes.
+     */
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
+    @Transactional
+    @Query("""
+            update WorkflowExecution e
+            set e.status = :target, e.nextAttemptAt = :nextAttemptAt,
+                e.finishedAt = :finishedAt, e.version = e.version + 1
+            where e.id = :id and e.status = :running
+              and e.attemptCount = :attempt
+              and e.startedAt is not null and e.startedAt <= :cutoff
+              and exists (select t.id from TaskDefinition t where t.workflow = e.workflow)
+              and not exists (select t.id from TaskDefinition t
+                              where t.workflow = e.workflow and t.taskType <> :noop)
+            """)
+    int recoverStaleNoopRunningAttempt(
+            @Param("id") Long id,
+            @Param("attempt") int attempt,
+            @Param("running") ExecutionStatus running,
+            @Param("target") ExecutionStatus target,
+            @Param("noop") com.flowforge.workflow.TaskType noop,
+            @Param("cutoff") Instant cutoff,
+            @Param("nextAttemptAt") Instant nextAttemptAt,
+            @Param("finishedAt") Instant finishedAt);
 }

@@ -56,7 +56,7 @@ public class ExecutionDispatchConsumer {
             result = "invalid";
             throw ex;
         } finally {
-            meters.counter("flowforge.worker.dispatch.total", "result", result).increment();
+            meters.counter("flowforge.worker.dispatch", "result", result).increment();
             sample.stop(meters.timer("flowforge.worker.dispatch.duration", "result", result));
         }
     }

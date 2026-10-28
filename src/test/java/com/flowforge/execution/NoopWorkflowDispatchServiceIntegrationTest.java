@@ -3,6 +3,7 @@ package com.flowforge.execution;
 import com.flowforge.workflow.TaskType;
 import com.flowforge.workflow.WorkflowDtos;
 import com.flowforge.workflow.WorkflowService;
+import io.micrometer.core.instrument.MeterRegistry;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -29,6 +30,7 @@ class NoopWorkflowDispatchServiceIntegrationTest {
     @Autowired private ExecutionDispatchOutboxRepository outbox;
     @Autowired private NoopWorkflowDispatchService worker;
     @Autowired private WorkerDispatchLeaseCoordinator coordinator;
+    @Autowired private MeterRegistry meters;
 
     @BeforeEach
     void clear() {
@@ -87,7 +89,7 @@ class NoopWorkflowDispatchServiceIntegrationTest {
     void listenerAcknowledgesOnlyAfterSuccessfulDatabaseProcessing() {
         long id = executions.enqueue(activeWorkflow(TaskType.NOOP)).getId();
         var event = eventFor(id);
-        var listener = new ExecutionDispatchConsumer(coordinator);
+        var listener = new ExecutionDispatchConsumer(coordinator, meters);
         var ack = mock(Acknowledgment.class);
 
         listener.onMessage(record(Long.toString(id), event), ack);

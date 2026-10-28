@@ -30,14 +30,14 @@ public class StaleRunningRecoveryScheduler {
             int count = recovery.recoverStaleNoopExecutions();
             // The service transaction has committed before this method returns.
             if (count > 0) {
-                meters.counter("flowforge.execution.recovery.executions.total").increment(count);
+                meters.counter("flowforge.execution.recovery.executions").increment(count);
                 log.warn("Recovered {} stale NOOP workflow execution attempts", count);
             }
             result = "succeeded";
         } catch (RuntimeException ex) {
             log.error("Stale NOOP recovery failed; will retry next cycle", ex);
         } finally {
-            meters.counter("flowforge.execution.recovery.cycles.total", "result", result).increment();
+            meters.counter("flowforge.execution.recovery.cycles", "result", result).increment();
             sample.stop(meters.timer("flowforge.execution.recovery.cycle.duration", "result", result));
         }
     }

@@ -90,12 +90,12 @@ class ExecutionDispatchConsumerValidationTest {
         assertThatThrownBy(() -> consumer.onMessage(record("1", event), ack))
                 .isInstanceOf(IllegalStateException.class);
         assertThat(count("failed")).isEqualTo(1);
-        assertThat(meters.find("flowforge.worker.dispatch.total")
+        assertThat(meters.find("flowforge.worker.dispatch")
                 .tag("result", "succeeded").counter()).isNull();
     }
 
     private double count(String result) {
-        return meters.get("flowforge.worker.dispatch.total").tag("result", result).counter().count();
+        return meters.get("flowforge.worker.dispatch").tag("result", result).counter().count();
     }
 
     private void reject(String key, ExecutionDispatchMessage event) {

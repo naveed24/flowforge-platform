@@ -21,9 +21,9 @@ class StaleRunningRecoverySchedulerMetricsTest {
         scheduler.recover();
 
         verify(recovery, times(3)).recoverStaleNoopExecutions();
-        assertThat(meters.get("flowforge.execution.recovery.cycles.total")
+        assertThat(meters.get("flowforge.execution.recovery.cycles")
                 .tag("result", "succeeded").counter().count()).isEqualTo(3);
-        assertThat(meters.get("flowforge.execution.recovery.executions.total")
+        assertThat(meters.get("flowforge.execution.recovery.executions")
                 .counter().count()).isEqualTo(5);
         assertThat(meters.get("flowforge.execution.recovery.cycle.duration")
                 .tag("result", "succeeded").timer().count()).isEqualTo(3);
@@ -37,11 +37,11 @@ class StaleRunningRecoverySchedulerMetricsTest {
         // Scheduler must swallow the error so the next scheduled poll can run.
         scheduler.recover();
 
-        assertThat(meters.get("flowforge.execution.recovery.cycles.total")
+        assertThat(meters.get("flowforge.execution.recovery.cycles")
                 .tag("result", "failed").counter().count()).isEqualTo(1);
         assertThat(meters.get("flowforge.execution.recovery.cycle.duration")
                 .tag("result", "failed").timer().count()).isEqualTo(1);
-        assertThat(meters.find("flowforge.execution.recovery.executions.total")
+        assertThat(meters.find("flowforge.execution.recovery.executions")
                 .counter()).isNull();
     }
 }

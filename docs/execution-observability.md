@@ -45,6 +45,30 @@ recovered-attempt counter. An empty successful poll increments the successful
 cycle counter but not recovered attempts. Recovery remains NOOP-only and
 disabled by default.
 
+## Due retry scheduler
+
+| Micrometer meter | Prometheus series | Meaning |
+| --- | --- | --- |
+| `flowforge.execution.retry.cycles` (counter) | `flowforge_execution_retry_cycles_total{result="..."}` | Successful or failed retry release polls |
+| `flowforge.execution.retry.requeued` (counter) | `flowforge_execution_retry_requeued_total` | Retry attempts committed back to QUEUED with their dispatch outbox records |
+| `flowforge.execution.retry.cycle.duration` (timer) | `flowforge_execution_retry_cycle_duration_seconds_count` / `_sum` | Duration of retry release polls |
+
+The only retry cycle `result` labels are `succeeded` and `failed`.
+An empty scan counts as a successful poll but does not increment the
+requeued counter. Failed transactions (including failures to persist the
+outbox intent) count as failed polls, **not** successful requeues. These
+metrics are emitted when the retry poller is enabled (default); tests
+disable the scheduler. A requeue is not a successful execution: dispatch
+and worker processing happen later. The requeued counter can increase more
+than once for an execution that fails across multiple attempts.
+
+These counters measure *this application's* scheduler activity, not
+global retry backlog or Kafka consumer lag. If several application replicas
+run the poller, aggregate counters across replicas with Prometheus.
+The transactional conditional update prevents concurrent pollers from
+claiming the same due retry, but there is no guarantee of exactly-once
+task execution.
+
 ## Example PromQL
 
 ```promql
@@ -56,6 +80,12 @@ sum(increase(flowforge_execution_recovery_cycles_total{result="failed"}[15m]))
 
 # Stale NOOP attempts recovered over the last hour.
 sum(increase(flowforge_execution_recovery_executions_total[1h]))
+
+# Failed retry scheduler polls over 15 minutes.
+sum(increase(flowforge_execution_retry_cycles_total{result="failed"}[15m]))
+
+# Due retries actually requeued over the last hour.
+sum(increase(flowforge_execution_retry_requeued_total[1h]))
 
 # Average dispatch listener duration in seconds over five minutes.
 sum(rate(flowforge_worker_dispatch_duration_seconds_sum[5m]))

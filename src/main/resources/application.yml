@@ -64,6 +64,11 @@ flowforge:
       timeout-ms: ${FLOWFORGE_STALE_RECOVERY_TIMEOUT_MS:900000}
       poll-interval-ms: ${FLOWFORGE_STALE_RECOVERY_POLL_INTERVAL_MS:60000}
       poll-initial-delay-ms: ${FLOWFORGE_STALE_RECOVERY_POLL_INITIAL_DELAY_MS:60000}
+    retry:
+      backlog:
+        enabled: ${FLOWFORGE_RETRY_BACKLOG_METRICS_ENABLED:false}
+        poll-interval-ms: ${FLOWFORGE_RETRY_BACKLOG_METRICS_INTERVAL_MS:30000}
+        poll-initial-delay-ms: ${FLOWFORGE_RETRY_BACKLOG_METRICS_INITIAL_DELAY_MS:30000}
     dispatch:
       enabled: ${FLOWFORGE_DISPATCH_ENABLED:false}
       topic: ${FLOWFORGE_DISPATCH_TOPIC:flowforge.execution.dispatch.v1}

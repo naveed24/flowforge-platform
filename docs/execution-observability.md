@@ -1,4 +1,4 @@
-# Worker dispatch and stale recovery metrics
+# Execution and worker observability
 
 FlowForge exposes bounded-cardinality Micrometer metrics through the existing
 Spring Boot Actuator and Prometheus endpoint at
@@ -69,6 +69,38 @@ The transactional conditional update prevents concurrent pollers from
 claiming the same due retry, but there is no guarantee of exactly-once
 task execution.
 
+## Database retry backlog (opt-in)
+
+Set `FLOWFORGE_RETRY_BACKLOG_METRICS_ENABLED=true` to enable a read-only
+PostgreSQL snapshot every 30 seconds. Change the interval with
+`FLOWFORGE_RETRY_BACKLOG_METRICS_INTERVAL_MS` and initial delay with
+`FLOWFORGE_RETRY_BACKLOG_METRICS_INITIAL_DELAY_MS` (both milliseconds).
+This sampler is independent of the due-retry scheduler: it can detect
+backlogs even when automatic requeueing is disabled.
+
+| Micrometer meter | Prometheus series | Meaning |
+| --- | --- | --- |
+| `flowforge.execution.retry.backlog` (gauge) | `flowforge_execution_retry_backlog{state="waiting|due"}` | Total RETRY_WAIT rows and those with nextAttemptAt <= snapshot time |
+| `flowforge.execution.retry.backlog.oldest_due_age` (gauge) | `flowforge_execution_retry_backlog_oldest_due_age_seconds` | Age in seconds of the oldest due retry at snapshot time, or zero if none |
+| `flowforge.execution.retry.backlog.last_success_timestamp` (gauge) | `flowforge_execution_retry_backlog_last_success_timestamp_seconds` | Unix timestamp of the last successful sample |
+| `flowforge.execution.retry.backlog.polls` (counter) | `flowforge_execution_retry_backlog_polls_total{result="succeeded|failed"}` | Snapshot successes and failures |
+
+The sampler queries PostgreSQL on a fixed-delay schedule; **Prometheus scrapes
+never query the database**. All gauges are published from a single immutable
+snapshot. A failed query preserves the last good values and timestamp, and
+increments the failed poll counter instead of reporting a false zero.
+Before the first successful sample the gauges start at zero, including the
+last-success timestamp; do not treat backlog zero as healthy until the
+last-success timestamp is positive and recent.
+
+These are database-wide counts, not per-worker counts. **Do not sum the
+backlog gauges across replicas**; use `max` or select one healthy instance
+instead. The queries are read-only but may scan many rows, so monitor database
+load and increase the sampling interval on large deployments. Concurrent
+updates can make the separate count/min queries an approximate snapshot;
+this is operational telemetry, not an accounting or fencing mechanism.
+Oldest-due age is measured when sampled, not continuously between polls.
+
 ## Example PromQL
 
 ```promql
@@ -86,6 +118,15 @@ sum(increase(flowforge_execution_retry_cycles_total{result="failed"}[15m]))
 
 # Due retries actually requeued over the last hour.
 sum(increase(flowforge_execution_retry_requeued_total[1h]))
+
+# Current due retry backlog across replicas (do not sum identical DB snapshots).
+max(flowforge_execution_retry_backlog{state="due"})
+
+# Alert when no successful backlog sample for 2 minutes, after initialization.
+time() - max(flowforge_execution_retry_backlog_last_success_timestamp_seconds) > 120
+
+# Age of the oldest due retry (sampled, not live).
+max(flowforge_execution_retry_backlog_oldest_due_age_seconds)
 
 # Average dispatch listener duration in seconds over five minutes.
 sum(rate(flowforge_worker_dispatch_duration_seconds_sum[5m]))

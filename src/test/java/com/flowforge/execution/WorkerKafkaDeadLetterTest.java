@@ -113,7 +113,9 @@ class WorkerKafkaDeadLetterTest {
         assertThat(handler.handleOne(new IllegalStateException("database unavailable"),
                 record, mock(Consumer.class), mock(MessageListenerContainer.class))).isFalse();
 
-        verifyNoInteractions(kafka);
+        // The recoverer probes the template during construction; transient
+        // failures must not publish any DLT record.
+        verify(kafka, never()).send(any(ProducerRecord.class));
         assertThat(meters.get("flowforge.worker.dead_letter.publish")
                 .tag("result", "published").counter().count()).isZero();
         assertThat(meters.get("flowforge.worker.dead_letter.publish")

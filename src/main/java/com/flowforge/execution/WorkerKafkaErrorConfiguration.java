@@ -1,5 +1,7 @@
 package com.flowforge.execution;
 
+import io.micrometer.core.instrument.MeterRegistry;
+import io.micrometer.core.instrument.Timer;
 import org.apache.kafka.common.TopicPartition;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
@@ -7,6 +9,7 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.kafka.annotation.EnableKafka;
 import org.springframework.kafka.core.KafkaTemplate;
+import org.springframework.kafka.listener.ConsumerRecordRecoverer;
 import org.springframework.kafka.listener.DeadLetterPublishingRecoverer;
 import org.springframework.kafka.listener.DefaultErrorHandler;
 import org.springframework.util.backoff.FixedBackOff;
@@ -26,7 +29,8 @@ public class WorkerKafkaErrorConfiguration {
     @Bean
     DefaultErrorHandler workerDispatchErrorHandler(
             KafkaTemplate<String, ExecutionDispatchMessage> kafka,
-            @Value("${flowforge.worker.consumer.dlt-topic:flowforge.execution.dispatch.v1.DLT}") String dltTopic) {
+            @Value("${flowforge.worker.consumer.dlt-topic:flowforge.execution.dispatch.v1.DLT}") String dltTopic,
+            MeterRegistry meters) {
         if (dltTopic == null || dltTopic.isBlank()) {
             throw new IllegalArgumentException("Worker dead-letter topic must not be blank");
         }
@@ -38,7 +42,27 @@ public class WorkerKafkaErrorConfiguration {
         recoverer.setFailIfSendResultIsError(true);
         recoverer.setWaitForSendResultTimeout(Duration.ofSeconds(10));
 
-        var handler = new DefaultErrorHandler(recoverer,
+        // Only count a published DLT record after the recoverer has waited for
+        // broker acknowledgment. If the send fails, propagate the exception so
+        // the original Kafka offset remains eligible for redelivery.
+        for (String result : new String[] {"published", "failed"}) {
+            meters.counter("flowforge.worker.dead_letter.publish", "result", result);
+            meters.timer("flowforge.worker.dead_letter.publish.duration", "result", result);
+        }
+        ConsumerRecordRecoverer observedRecoverer = (record, error) -> {
+            Timer.Sample sample = Timer.start(meters);
+            String result = "failed";
+            try {
+                recoverer.accept(record, error);
+                result = "published";
+            } finally {
+                meters.counter("flowforge.worker.dead_letter.publish", "result", result).increment();
+                sample.stop(meters.timer(
+                        "flowforge.worker.dead_letter.publish.duration", "result", result));
+            }
+        };
+
+        var handler = new DefaultErrorHandler(observedRecoverer,
                 new FixedBackOff(5000L, FixedBackOff.UNLIMITED_ATTEMPTS));
         // Invalid identity/payload is permanent. Database/Kafka outages are not.
         handler.addNotRetryableExceptions(IllegalArgumentException.class);

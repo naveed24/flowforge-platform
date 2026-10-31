@@ -68,7 +68,12 @@ every five seconds without a finite retry limit; a broker outage therefore
 cannot exhaust a fixed retry budget and discard legitimate work. A prolonged
 database outage can still block a Kafka partition. Monitor consumer lag and
 DLT volume. DLT records require operator investigation and explicit replay;
-the DLT is **not** automatically consumed.
+the DLT is **not** automatically consumed. With the worker enabled,
+`flowforge_worker_dead_letter_publish_total{result="published|failed"}`
+reports broker-confirmed DLT sends and failed publication attempts. It does
+not report DLT backlog or Kafka consumer lag; see
+[execution observability](execution-observability.md) for metric semantics
+and PromQL examples.
 
 **Provision both Kafka topics before enabling the worker** and give the
 consumer group read access to the dispatch topic and the producer write access

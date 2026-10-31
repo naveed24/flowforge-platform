@@ -30,6 +30,32 @@ before the listener (including malformed raw JSON sent directly to the DLT)
 are not represented in these listener counters. Monitor DLT topic throughput
 and consumer lag separately.
 
+## Kafka dead-letter publishing
+
+When `FLOWFORGE_WORKER_ENABLED=true`, the Kafka error handler reports
+dead-letter publication outcomes, including deserialization failures that
+never reach the dispatch listener. Both result series are registered at
+startup, even before the first poison record.
+
+| Micrometer meter | Prometheus series | Meaning |
+| --- | --- | --- |
+| `flowforge.worker.dead_letter.publish` (counter) | `flowforge_worker_dead_letter_publish_total{result="published|failed"}` | DLT publication attempts by broker-confirmed outcome |
+| `flowforge.worker.dead_letter.publish.duration` (timer) | `flowforge_worker_dead_letter_publish_duration_seconds_count` / `_sum` | Time spent in the DLT recoverer, including waiting for the broker |
+
+`published` increments **only after** the recoverer returns following a
+successful broker-acknowledged send. `failed` increments if publication
+throws, including broker failures and send timeouts. Failed publication
+propagates back to the Kafka error handler; the source record is **not**
+treated as recovered and is retried. Ordinary transient processing errors
+do not enter the DLT recoverer and do not affect these counters.
+
+These are **per-instance publication-attempt counters**, not unique poison
+messages, retained DLT topic depth, consumer lag, or proof that a human
+replayed a message. Retries may produce multiple failed attempts for one
+source offset. Labels are fixed (`published`, `failed`); do not attach
+exception text, topic, partition, key, or execution ID. A published record
+still requires operator investigation and explicit replay.
+
 ## Stale NOOP recovery
 
 | Micrometer meter | Prometheus series | Meaning |
@@ -106,6 +132,12 @@ Oldest-due age is measured when sampled, not continuously between polls.
 ```promql
 # Dispatch processing failures per second (transient failures may redeliver).
 sum(rate(flowforge_worker_dispatch_total{result="failed"}[5m]))
+
+# Poison records successfully sent to the DLT over 15 minutes.
+sum(increase(flowforge_worker_dead_letter_publish_total{result="published"}[15m]))
+
+# Failed DLT sends over 15 minutes: investigate broker/topic/ACL health.
+sum(increase(flowforge_worker_dead_letter_publish_total{result="failed"}[15m]))
 
 # Number of failed stale-recovery polls in the last 15 minutes.
 sum(increase(flowforge_execution_recovery_cycles_total{result="failed"}[15m]))

@@ -1,5 +1,6 @@
 package com.flowforge.execution;
 
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import org.apache.kafka.clients.consumer.Consumer;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.apache.kafka.clients.producer.ProducerRecord;
@@ -51,8 +52,9 @@ class WorkerKafkaDeadLetterTest {
         KafkaTemplate<String, ExecutionDispatchMessage> kafka = mock(KafkaTemplate.class);
         when(kafka.send(any(ProducerRecord.class)))
                 .thenReturn(CompletableFuture.completedFuture(null));
+        var meters = new SimpleMeterRegistry();
         var handler = new WorkerKafkaErrorConfiguration()
-                .workerDispatchErrorHandler(kafka, "flowforge.execution.dispatch.v1.DLT");
+                .workerDispatchErrorHandler(kafka, "flowforge.execution.dispatch.v1.DLT", meters);
         var record = new ConsumerRecord<>("flowforge.execution.dispatch.v1", 2, 12L,
                 "bad-key", new ExecutionDispatchMessage(10, 1, 100));
 
@@ -65,6 +67,12 @@ class WorkerKafkaDeadLetterTest {
         assertThat(capture.getValue().topic()).isEqualTo("flowforge.execution.dispatch.v1.DLT");
         assertThat(capture.getValue().key()).isEqualTo("bad-key");
         assertThat(capture.getValue().value()).isEqualTo(record.value());
+        assertThat(meters.get("flowforge.worker.dead_letter.publish")
+                .tag("result", "published").counter().count()).isEqualTo(1);
+        assertThat(meters.get("flowforge.worker.dead_letter.publish")
+                .tag("result", "failed").counter().count()).isZero();
+        assertThat(meters.get("flowforge.worker.dead_letter.publish.duration")
+                .tag("result", "published").timer().count()).isEqualTo(1);
     }
 
     @Test
@@ -73,8 +81,9 @@ class WorkerKafkaDeadLetterTest {
         KafkaTemplate<String, ExecutionDispatchMessage> kafka = mock(KafkaTemplate.class);
         when(kafka.send(any(ProducerRecord.class)))
                 .thenReturn(CompletableFuture.failedFuture(new IllegalStateException("broker unavailable")));
+        var meters = new SimpleMeterRegistry();
         var handler = new WorkerKafkaErrorConfiguration()
-                .workerDispatchErrorHandler(kafka, "flowforge.execution.dispatch.v1.DLT");
+                .workerDispatchErrorHandler(kafka, "flowforge.execution.dispatch.v1.DLT", meters);
         var record = new ConsumerRecord<>("flowforge.execution.dispatch.v1", 0, 13L,
                 "bad-key", new ExecutionDispatchMessage(10, 1, 100));
 
@@ -83,5 +92,31 @@ class WorkerKafkaDeadLetterTest {
         assertThat(handler.handleOne(new IllegalArgumentException("invalid key"),
                 record, mock(Consumer.class), mock(MessageListenerContainer.class))).isFalse();
         verify(kafka).send(any(ProducerRecord.class));
+        assertThat(meters.get("flowforge.worker.dead_letter.publish")
+                .tag("result", "failed").counter().count()).isEqualTo(1);
+        assertThat(meters.get("flowforge.worker.dead_letter.publish")
+                .tag("result", "published").counter().count()).isZero();
+        assertThat(meters.get("flowforge.worker.dead_letter.publish.duration")
+                .tag("result", "failed").timer().count()).isEqualTo(1);
+    }
+
+    @Test
+    @SuppressWarnings({"unchecked", "rawtypes"})
+    void transientProcessingFailuresAreRetriedWithoutDeadLetterMetrics() {
+        KafkaTemplate<String, ExecutionDispatchMessage> kafka = mock(KafkaTemplate.class);
+        var meters = new SimpleMeterRegistry();
+        var handler = new WorkerKafkaErrorConfiguration()
+                .workerDispatchErrorHandler(kafka, "flowforge.execution.dispatch.v1.DLT", meters);
+        var record = new ConsumerRecord<>("flowforge.execution.dispatch.v1", 0, 15L,
+                "10", new ExecutionDispatchMessage(10, 1, 100));
+
+        assertThat(handler.handleOne(new IllegalStateException("database unavailable"),
+                record, mock(Consumer.class), mock(MessageListenerContainer.class))).isFalse();
+
+        verifyNoInteractions(kafka);
+        assertThat(meters.get("flowforge.worker.dead_letter.publish")
+                .tag("result", "published").counter().count()).isZero();
+        assertThat(meters.get("flowforge.worker.dead_letter.publish")
+                .tag("result", "failed").counter().count()).isZero();
     }
 }

@@ -71,9 +71,11 @@ DLT volume. DLT records require operator investigation and explicit replay;
 the DLT is **not** automatically consumed. With the worker enabled,
 `flowforge_worker_dead_letter_publish_total{result="published|failed"}`
 reports broker-confirmed DLT sends and failed publication attempts. It does
-not report DLT backlog or Kafka consumer lag; see
-[execution observability](execution-observability.md) for metric semantics
-and PromQL examples.
+not report DLT backlog or Kafka consumer lag by itself. Enable
+`FLOWFORGE_KAFKA_LAG_METRICS_ENABLED=true` for read-only Kafka AdminClient
+sampling of consumer-group dispatch lag and retained DLT topic depth; see
+[execution observability](execution-observability.md) for metric semantics,
+required broker permissions, and PromQL examples.
 
 **Provision both Kafka topics before enabling the worker** and give the
 consumer group read access to the dispatch topic and the producer write access

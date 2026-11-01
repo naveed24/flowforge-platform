@@ -84,3 +84,7 @@ flowforge:
       group-id: ${FLOWFORGE_WORKER_GROUP_ID:flowforge-workers}
       dlt-topic: ${FLOWFORGE_WORKER_DLT_TOPIC:flowforge.execution.dispatch.v1.DLT}
       lease-enabled: ${FLOWFORGE_WORKER_LEASE_ENABLED:false}
+      lag:
+        enabled: ${FLOWFORGE_KAFKA_LAG_METRICS_ENABLED:false}
+        poll-interval-ms: ${FLOWFORGE_KAFKA_LAG_METRICS_INTERVAL_MS:30000}
+        poll-initial-delay-ms: ${FLOWFORGE_KAFKA_LAG_METRICS_INITIAL_DELAY_MS:30000}

@@ -56,6 +56,58 @@ source offset. Labels are fixed (`published`, `failed`); do not attach
 exception text, topic, partition, key, or execution ID. A published record
 still requires operator investigation and explicit replay.
 
+## Kafka dispatch lag and retained dead-letter records (opt-in)
+
+Set `FLOWFORGE_KAFKA_LAG_METRICS_ENABLED=true` to sample broker offsets
+every 30 seconds; use `FLOWFORGE_KAFKA_LAG_METRICS_INTERVAL_MS` and
+`FLOWFORGE_KAFKA_LAG_METRICS_INITIAL_DELAY_MS` to change the interval
+and startup delay (milliseconds). The sampler is independent of the worker
+and publisher switches and is **disabled by default**. Provision both topics
+first. The Kafka AdminClient inherits Spring Kafka's broker/security
+configuration and requires permission to describe both topics, read their
+earliest/latest offsets and read committed offsets for the configured worker
+consumer group.
+
+| Micrometer meter | Prometheus series | Meaning |
+| --- | --- | --- |
+| `flowforge.kafka.dispatch.lag` (gauge) | `flowforge_kafka_dispatch_lag` | Sum of latest minus next committed offsets for dispatch partitions, clamped to retained range |
+| `flowforge.kafka.dead_letter.retained` (gauge) | `flowforge_kafka_dead_letter_retained` | Number of records currently retained in the DLT, latest minus earliest across its partitions |
+| `flowforge.kafka.offsets.last_success_timestamp` (gauge) | `flowforge_kafka_offsets_last_success_timestamp_seconds` | Unix timestamp of last complete successful broker sample |
+| `flowforge.kafka.offsets.polls` (counter) | `flowforge_kafka_offsets_polls_total{result="succeeded|failed"}` | Successful and failed offset samples |
+
+Uncommitted dispatch partitions start from the earliest **retained** offset,
+matching the configured worker `auto-offset-reset: earliest`. Committed
+offsets beyond the broker's current range are clamped to avoid negative lag.
+Lag includes any retained records not yet acknowledged by the group; it is
+not a count of unique workflow executions. The DLT gauge is **retained topic
+depth**, not an unprocessed-message backlog: DLT records are not consumed
+automatically, and Kafka retention can delete records without an operator
+replaying them.
+
+The poller fetches topic metadata, earliest/latest offsets, and group
+commits with bounded timeouts. Scrapes read an atomic in-memory snapshot
+and never call Kafka. Failed samples keep the last good values and timestamp,
+and increment the failure counter; before the first successful sample the
+gauges are zero, **not proof of an empty backlog**. A stale timestamp
+must be alerted on. These are broker-wide gauges: do not sum them across
+application replicas. Sampling may add broker load; increase the interval
+for large clusters. The snapshot is approximate because offsets can advance
+between admin calls. This telemetry is not an execution fencing mechanism.
+
+```promql
+# Current consumer-group dispatch lag (not summed across replicas).
+max(flowforge_kafka_dispatch_lag)
+
+# Retained DLT records requiring investigation.
+max(flowforge_kafka_dead_letter_retained)
+
+# Stale/uninitialized offset sampler (e.g. missing topic or Kafka ACL).
+time() - max(flowforge_kafka_offsets_last_success_timestamp_seconds) > 120
+
+# Kafka admin sampling failures in the last 15 minutes.
+sum(increase(flowforge_kafka_offsets_polls_total{result="failed"}[15m]))
+```
+
 ## Stale NOOP recovery
 
 | Micrometer meter | Prometheus series | Meaning |

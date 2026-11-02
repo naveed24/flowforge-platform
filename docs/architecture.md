@@ -49,3 +49,10 @@ flowchart LR
 5. Model retry/backoff explicitly.
 6. Preserve execution history for debugging.
 7. Expose health and metrics by default.
+
+## Side-effecting task safety foundation
+
+A durable per-execution/task checkpoint serializes admission and fences database
+completion by claim token and execution attempt. Ambiguous external outcomes
+remain blocked across retries until reconciled; this is not an external
+exactly-once guarantee. See [task side-effect fencing](task-side-effect-fencing.md).

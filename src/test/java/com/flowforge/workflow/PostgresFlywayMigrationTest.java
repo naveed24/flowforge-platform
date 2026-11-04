@@ -30,7 +30,7 @@ class PostgresFlywayMigrationTest {
 
         Flyway flyway = Flyway.configure().dataSource(url, username, password).load();
         flyway.migrate();
-        assertThat(flyway.info().current().getVersion().getVersion()).isEqualTo("9");
+        assertThat(flyway.info().current().getVersion().getVersion()).isEqualTo("10");
 
         try (Connection connection = DriverManager.getConnection(url, username, password)) {
             assertThat(hasColumn(connection, "workflows", "schedule_type")).isTrue();
@@ -53,6 +53,10 @@ class PostgresFlywayMigrationTest {
             assertThat(hasColumn(connection, "execution_task_checkpoints", "attempt_number")).isTrue();
             assertThat(hasIndex(connection, "uq_execution_task_checkpoints_task")).isTrue();
             assertThat(hasIndex(connection, "idx_execution_task_checkpoints_state")).isTrue();
+            assertThat(hasColumn(connection, "task_checkpoint_reconciliation_audit", "checkpoint_id")).isTrue();
+            assertThat(hasColumn(connection, "task_checkpoint_reconciliation_audit", "previous_claim_token")).isTrue();
+            assertThat(hasColumn(connection, "task_checkpoint_reconciliation_audit", "evidence_reference")).isTrue();
+            assertThat(hasIndex(connection, "idx_task_checkpoint_reconciliation_audit_checkpoint")).isTrue();
         }
     }
 

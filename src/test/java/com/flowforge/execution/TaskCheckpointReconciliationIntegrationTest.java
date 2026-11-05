@@ -71,8 +71,8 @@ class TaskCheckpointReconciliationIntegrationTest {
         long id = createRunning();
         var claim = fences.tryClaim(id, "send", 1).orElseThrow();
         var row = checkpoints.findByExecution_IdAndTaskKey(id, "send").orElseThrow();
-        for (String invalid : List.of("  ", "ticket:123\\nforged", "ticket:123\\rforged",
-                "ticket:\\u200B123", "ticket:\\u202E123", "x".repeat(513))) {
+        for (String invalid : List.of("  ", "ticket:123\nforged", "ticket:123\rforged",
+                "ticket:\u200B123", "ticket:\u202E123", "x".repeat(513))) {
             assertThatThrownBy(() -> reconciliation.reconcile(id, "send", 1, claim.token(),
                     TaskCheckpointReconciliationService.VerifiedOutcome.REMOTE_SUCCEEDED, invalid))
                     .as("Invalid evidence: %s", invalid).isInstanceOf(IllegalArgumentException.class);

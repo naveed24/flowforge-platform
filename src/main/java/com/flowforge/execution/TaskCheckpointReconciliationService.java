@@ -4,6 +4,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import java.time.Clock;
+import java.util.Objects;
 import java.util.UUID;
 
 /**
@@ -31,10 +32,10 @@ public class TaskCheckpointReconciliationService {
             UUID expectedToken, VerifiedOutcome outcome, String evidenceReference) {
         if (executionId <= 0 || taskKey == null || taskKey.isBlank()
                 || expectedAttempt <= 0 || expectedToken == null || outcome == null
-                || evidenceReference == null || evidenceReference.isBlank()
-                || evidenceReference.length() > 512) {
+                || evidenceReference == null) {
             throw new IllegalArgumentException("Valid checkpoint identity and verified evidence are required");
         }
+        String evidence = validateEvidenceReference(evidenceReference);
         // Lock the same parent row as worker admission/completion.
         if (executions.findByIdForUpdate(executionId).isEmpty()) return false;
         var found = checkpoints.findByExecution_IdAndTaskKey(executionId, taskKey);
@@ -49,9 +50,20 @@ public class TaskCheckpointReconciliationService {
                 : TaskExecutionCheckpoint.State.RETRYABLE;
         var now = clock.instant();
         audit.saveAndFlush(new TaskCheckpointReconciliationAudit(
-                checkpoint, target, evidenceReference.trim(), now));
+                checkpoint, target, evidence, now));
         checkpoint.transition(target, now);
         checkpoints.saveAndFlush(checkpoint);
         return true;
+    }
+    /** Reject ambiguous, multiline or invisible evidence identifiers before persisting an audit. */
+    static String validateEvidenceReference(String raw) {
+        String evidence = Objects.requireNonNull(raw, "Evidence reference is required").strip();
+        if (evidence.isEmpty() || evidence.length() > 512 || evidence.codePoints().anyMatch(cp ->
+                Character.isISOControl(cp) || Character.getType(cp) == Character.FORMAT
+                        || Character.getType(cp) == Character.LINE_SEPARATOR
+                        || Character.getType(cp) == Character.PARAGRAPH_SEPARATOR)) {
+            throw new IllegalArgumentException("Evidence reference must be 1-512 visible characters without controls");
+        }
+        return evidence;
     }
 }

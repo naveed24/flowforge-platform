@@ -66,6 +66,26 @@ class TaskCheckpointReconciliationIntegrationTest {
                 .getState()).isEqualTo(TaskExecutionCheckpoint.State.IN_PROGRESS);
     }
 
+    @Test
+    void invalidEvidenceCannotAlterCheckpointOrCreateAudit() {
+        long id = createRunning();
+        var claim = fences.tryClaim(id, "send", 1).orElseThrow();
+        var row = checkpoints.findByExecution_IdAndTaskKey(id, "send").orElseThrow();
+        for (String invalid : List.of("  ", "ticket:123\nforged", "ticket:123\rforged",
+                "ticket:\u200B123", "ticket:\u202E123", "x".repeat(513))) {
+            assertThatThrownBy(() -> reconciliation.reconcile(id, "send", 1, claim.token(),
+                    TaskCheckpointReconciliationService.VerifiedOutcome.REMOTE_SUCCEEDED, invalid))
+                    .as("Invalid evidence: %s", invalid).isInstanceOf(IllegalArgumentException.class);
+        }
+        assertThat(audit.countByCheckpoint_Id(row.getId())).isZero();
+        assertThat(checkpoints.findByExecution_IdAndTaskKey(id, "send").orElseThrow()
+                .getState()).isEqualTo(TaskExecutionCheckpoint.State.IN_PROGRESS);
+        assertThat(reconciliation.reconcile(id, "send", 1, claim.token(),
+                TaskCheckpointReconciliationService.VerifiedOutcome.REMOTE_SUCCEEDED,
+                "  provider:receipt-123  ")).isTrue();
+        assertThat(audit.countByCheckpoint_Id(row.getId())).isEqualTo(1);
+    }
+
     private long createRunning() {
         var created = workflows.create(new WorkflowDtos.CreateWorkflowRequest(
                 "reconcile-" + UUID.randomUUID(), "Reconciliation test",

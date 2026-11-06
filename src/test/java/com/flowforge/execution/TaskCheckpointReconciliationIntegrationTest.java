@@ -6,6 +6,8 @@ import com.flowforge.workflow.WorkflowService;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.ActiveProfiles;
 import java.util.List;
 import java.util.Set;
@@ -24,6 +26,7 @@ class TaskCheckpointReconciliationIntegrationTest {
     @Autowired TaskExecutionCheckpointRepository checkpoints;
     @Autowired TaskCheckpointReconciliationAuditRepository audit;
     @Autowired TaskCheckpointReconciliationService reconciliation;
+    @Autowired JdbcTemplate jdbc;
 
     @Test
     void verifiedRemoteSuccessBlocksReplayAndWritesSingleAudit() {
@@ -84,6 +87,30 @@ class TaskCheckpointReconciliationIntegrationTest {
                 TaskCheckpointReconciliationService.VerifiedOutcome.REMOTE_SUCCEEDED,
                 "  provider:receipt-123  ")).isTrue();
         assertThat(audit.countByCheckpoint_Id(row.getId())).isEqualTo(1);
+    }
+
+    @Test
+    void databaseRejectsDuplicateReconciliationOfSameClaim() {
+        long id = createRunning();
+        var claim = fences.tryClaim(id, "send", 1).orElseThrow();
+        var checkpoint = checkpoints.findByExecution_IdAndTaskKey(id, "send").orElseThrow();
+        assertThat(reconciliation.reconcile(id, "send", 1, claim.token(),
+                TaskCheckpointReconciliationService.VerifiedOutcome.REMOTE_SUCCEEDED,
+                "provider:receipt")).isTrue();
+
+        // Exercise the database constraint directly, not the service's existing
+        // state guard. A second writer must not duplicate the audit for a claim.
+        assertThatThrownBy(() -> jdbc.update("""
+                INSERT INTO task_checkpoint_reconciliation_audit
+                    (checkpoint_id, previous_attempt, previous_claim_token,
+                     resolved_state, evidence_reference, reconciled_at)
+                SELECT checkpoint_id, previous_attempt, previous_claim_token,
+                       resolved_state, 'duplicate:receipt', reconciled_at
+                  FROM task_checkpoint_reconciliation_audit
+                 WHERE checkpoint_id = ?
+                """, checkpoint.getId()))
+                .isInstanceOf(DataIntegrityViolationException.class);
+        assertThat(audit.countByCheckpoint_Id(checkpoint.getId())).isEqualTo(1);
     }
 
     private long createRunning() {

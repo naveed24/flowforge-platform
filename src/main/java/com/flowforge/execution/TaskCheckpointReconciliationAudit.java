@@ -9,7 +9,10 @@ import java.util.UUID;
 
 /** Immutable evidence trail for a manually verified remote task outcome. */
 @Entity
-@Table(name = "task_checkpoint_reconciliation_audit")
+@Table(name = "task_checkpoint_reconciliation_audit", indexes = {
+        @Index(name = "uq_task_checkpoint_reconciliation_claim",
+                columnList = "checkpoint_id,previous_attempt,previous_claim_token", unique = true)
+})
 @Getter
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 public class TaskCheckpointReconciliationAudit {

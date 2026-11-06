@@ -98,17 +98,22 @@ class TaskCheckpointReconciliationIntegrationTest {
                 TaskCheckpointReconciliationService.VerifiedOutcome.REMOTE_SUCCEEDED,
                 "provider:receipt")).isTrue();
 
-        // Exercise the database constraint directly, not the service's existing
-        // state guard. A second writer must not duplicate the audit for a claim.
+        // Exercise the database constraint directly, not the service's state
+        // guard. Use explicit VALUES to guarantee a duplicate insert attempt.
+        assertThat(audit.countByCheckpoint_Id(checkpoint.getId())).isEqualTo(1);
+        var existing = jdbc.queryForMap("""
+                SELECT previous_attempt, previous_claim_token, resolved_state, reconciled_at
+                  FROM task_checkpoint_reconciliation_audit
+                 WHERE checkpoint_id = ?
+                """, checkpoint.getId());
         assertThatThrownBy(() -> jdbc.update("""
                 INSERT INTO task_checkpoint_reconciliation_audit
                     (checkpoint_id, previous_attempt, previous_claim_token,
                      resolved_state, evidence_reference, reconciled_at)
-                SELECT checkpoint_id, previous_attempt, previous_claim_token,
-                       resolved_state, 'duplicate:receipt', reconciled_at
-                  FROM task_checkpoint_reconciliation_audit
-                 WHERE checkpoint_id = ?
-                """, checkpoint.getId()))
+                VALUES (?, ?, ?, ?, ?, ?)
+                """, checkpoint.getId(), existing.get("previous_attempt"),
+                existing.get("previous_claim_token"), existing.get("resolved_state"),
+                "duplicate:receipt", existing.get("reconciled_at")))
                 .isInstanceOf(DataIntegrityViolationException.class);
         assertThat(audit.countByCheckpoint_Id(checkpoint.getId())).isEqualTo(1);
     }

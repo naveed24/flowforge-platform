@@ -30,7 +30,7 @@ class PostgresFlywayMigrationTest {
 
         Flyway flyway = Flyway.configure().dataSource(url, username, password).load();
         flyway.migrate();
-        assertThat(flyway.info().current().getVersion().getVersion()).isEqualTo("11");
+        assertThat(flyway.info().current().getVersion().getVersion()).isEqualTo("12");
 
         try (Connection connection = DriverManager.getConnection(url, username, password)) {
             assertThat(hasColumn(connection, "workflows", "schedule_type")).isTrue();
@@ -58,6 +58,10 @@ class PostgresFlywayMigrationTest {
             assertThat(hasColumn(connection, "task_checkpoint_reconciliation_audit", "evidence_reference")).isTrue();
             assertThat(hasIndex(connection, "idx_task_checkpoint_reconciliation_audit_checkpoint")).isTrue();
             assertThat(hasIndex(connection, "uq_task_checkpoint_reconciliation_claim")).isTrue();
+            assertThat(hasConstraint(connection, "task_checkpoint_reconciliation_audit",
+                    "chk_task_reconciliation_previous_attempt")).isTrue();
+            assertThat(hasConstraint(connection, "task_checkpoint_reconciliation_audit",
+                    "chk_task_reconciliation_evidence_not_blank")).isTrue();
         }
     }
 
@@ -82,4 +86,20 @@ class PostgresFlywayMigrationTest {
             }
         }
     }
+    private boolean hasConstraint(Connection connection, String table, String constraint) throws SQLException {
+        try (PreparedStatement query = connection.prepareStatement("""
+                SELECT 1 FROM pg_constraint c
+                  JOIN pg_class t ON t.oid = c.conrelid
+                  JOIN pg_namespace n ON n.oid = t.relnamespace
+                 WHERE n.nspname = 'public' AND t.relname = ?
+                   AND c.conname = ? AND c.contype = 'c' AND c.convalidated
+                """)) {
+            query.setString(1, table);
+            query.setString(2, constraint);
+            try (ResultSet found = query.executeQuery()) {
+                return found.next();
+            }
+        }
+    }
+
 }

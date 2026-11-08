@@ -88,11 +88,11 @@ class PostgresFlywayMigrationTest {
             assertThat(insert.executeUpdate()).isEqualTo(1);
 
             insert.setLong(1, 2);
-            insert.setString(2, "ticket:forged\\nentry");
+            insert.setString(2, "ticket:forged\nentry");
             assertThatThrownBy(insert::executeUpdate).isInstanceOf(SQLException.class);
 
             insert.setLong(1, 3);
-            insert.setString(2, "ticket:forged\\rentry");
+            insert.setString(2, "ticket:forged\rentry");
             assertThatThrownBy(insert::executeUpdate).isInstanceOf(SQLException.class);
         }
     }

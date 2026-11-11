@@ -31,7 +31,7 @@ class PostgresFlywayMigrationTest {
 
         Flyway flyway = Flyway.configure().dataSource(url, username, password).load();
         flyway.migrate();
-        assertThat(flyway.info().current().getVersion().getVersion()).isEqualTo("14");
+        assertThat(flyway.info().current().getVersion().getVersion()).isEqualTo("15");
 
         try (Connection connection = DriverManager.getConnection(url, username, password)) {
             assertThat(hasColumn(connection, "workflows", "schedule_type")).isTrue();
@@ -68,6 +68,7 @@ class PostgresFlywayMigrationTest {
             assertThat(hasConstraint(connection, "task_checkpoint_reconciliation_audit",
                     "chk_task_reconciliation_evidence_max_length")).isTrue();
             assertEvidenceControlConstraint(connection);
+            assertAuditRetentionForeignKey(connection);
         }
     }
 
@@ -104,6 +105,27 @@ class PostgresFlywayMigrationTest {
             insert.setLong(1, 5);
             insert.setString(2, "a".repeat(513));
             assertThatThrownBy(insert::executeUpdate).isInstanceOf(SQLException.class);
+        }
+    }
+
+    /** Audit rows must prevent parent checkpoint deletion, not disappear via CASCADE. */
+    private void assertAuditRetentionForeignKey(Connection connection) throws SQLException {
+        try (PreparedStatement query = connection.prepareStatement("""
+                SELECT c.confdeltype
+                  FROM pg_constraint c
+                  JOIN pg_class child ON child.oid = c.conrelid
+                  JOIN pg_class parent ON parent.oid = c.confrelid
+                  JOIN pg_namespace n ON n.oid = child.relnamespace
+                 WHERE n.nspname = 'public'
+                   AND child.relname = 'task_checkpoint_reconciliation_audit'
+                   AND parent.relname = 'execution_task_checkpoints'
+                   AND c.contype = 'f'
+                """)) {
+            try (ResultSet result = query.executeQuery()) {
+                assertThat(result.next()).isTrue();
+                assertThat(result.getString(1)).isEqualTo("r"); // PostgreSQL RESTRICT
+                assertThat(result.next()).isFalse();
+            }
         }
     }
 

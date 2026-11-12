@@ -31,7 +31,7 @@ class PostgresFlywayMigrationTest {
 
         Flyway flyway = Flyway.configure().dataSource(url, username, password).load();
         flyway.migrate();
-        assertThat(flyway.info().current().getVersion().getVersion()).isEqualTo("15");
+        assertThat(flyway.info().current().getVersion().getVersion()).isEqualTo("16");
 
         try (Connection connection = DriverManager.getConnection(url, username, password)) {
             assertThat(hasColumn(connection, "workflows", "schedule_type")).isTrue();
@@ -69,6 +69,7 @@ class PostgresFlywayMigrationTest {
                     "chk_task_reconciliation_evidence_max_length")).isTrue();
             assertEvidenceControlConstraint(connection);
             assertAuditRetentionForeignKey(connection);
+            assertAuditAppendOnlyTrigger(connection);
         }
     }
 
@@ -124,6 +125,55 @@ class PostgresFlywayMigrationTest {
             try (ResultSet result = query.executeQuery()) {
                 assertThat(result.next()).isTrue();
                 assertThat(result.getString(1)).isEqualTo("r"); // PostgreSQL RESTRICT
+                assertThat(result.next()).isFalse();
+            }
+        }
+    }
+
+    /** Confirm the deployed trigger exists and rejects mutations, not just its DDL name. */
+    private void assertAuditAppendOnlyTrigger(Connection connection) throws SQLException {
+        try (PreparedStatement query = connection.prepareStatement("""
+                SELECT 1 FROM pg_trigger t
+                  JOIN pg_class c ON c.oid = t.tgrelid
+                  JOIN pg_namespace n ON n.oid = c.relnamespace
+                 WHERE n.nspname = 'public'
+                   AND c.relname = 'task_checkpoint_reconciliation_audit'
+                   AND t.tgname = 'trg_reconciliation_audit_append_only'
+                   AND NOT t.tgisinternal AND t.tgenabled = 'O'
+                """)) {
+            try (ResultSet result = query.executeQuery()) {
+                assertThat(result.next()).isTrue();
+                assertThat(result.next()).isFalse();
+            }
+        }
+
+        // Use an isolated temporary table to exercise the same trigger function
+        // without creating workflow/execution fixture rows in the shared CI schema.
+        try (java.sql.Statement statement = connection.createStatement()) {
+            statement.execute("CREATE TEMP TABLE reconciliation_mutation_probe "
+                    + "(LIKE task_checkpoint_reconciliation_audit INCLUDING CONSTRAINTS)");
+            statement.execute("""
+                    CREATE TRIGGER trg_reconciliation_probe
+                    BEFORE UPDATE OR DELETE ON reconciliation_mutation_probe
+                    FOR EACH ROW EXECUTE FUNCTION reject_reconciliation_audit_mutation()
+                    """);
+            statement.execute("""
+                    INSERT INTO reconciliation_mutation_probe
+                        (id, checkpoint_id, previous_attempt, previous_claim_token,
+                         resolved_state, evidence_reference, reconciled_at)
+                    VALUES (1, 1, 1, '00000000-0000-0000-0000-000000000001',
+                            'SUCCEEDED', 'receipt:verified', CURRENT_TIMESTAMP)
+                    """);
+            assertThatThrownBy(() -> statement.executeUpdate(
+                    "UPDATE reconciliation_mutation_probe SET evidence_reference = 'forged' WHERE id = 1"))
+                    .isInstanceOf(SQLException.class);
+            assertThatThrownBy(() -> statement.executeUpdate(
+                    "DELETE FROM reconciliation_mutation_probe WHERE id = 1"))
+                    .isInstanceOf(SQLException.class);
+            try (ResultSet result = statement.executeQuery(
+                    "SELECT evidence_reference FROM reconciliation_mutation_probe WHERE id = 1")) {
+                assertThat(result.next()).isTrue();
+                assertThat(result.getString(1)).isEqualTo("receipt:verified");
                 assertThat(result.next()).isFalse();
             }
         }

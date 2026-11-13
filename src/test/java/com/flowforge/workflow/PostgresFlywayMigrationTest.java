@@ -31,7 +31,7 @@ class PostgresFlywayMigrationTest {
 
         Flyway flyway = Flyway.configure().dataSource(url, username, password).load();
         flyway.migrate();
-        assertThat(flyway.info().current().getVersion().getVersion()).isEqualTo("16");
+        assertThat(flyway.info().current().getVersion().getVersion()).isEqualTo("17");
 
         try (Connection connection = DriverManager.getConnection(url, username, password)) {
             assertThat(hasColumn(connection, "workflows", "schedule_type")).isTrue();
@@ -70,6 +70,7 @@ class PostgresFlywayMigrationTest {
             assertEvidenceControlConstraint(connection);
             assertAuditRetentionForeignKey(connection);
             assertAuditAppendOnlyTrigger(connection);
+            assertAuditTruncateGuard(connection);
         }
     }
 
@@ -172,6 +173,55 @@ class PostgresFlywayMigrationTest {
                     .isInstanceOf(SQLException.class);
             try (ResultSet result = statement.executeQuery(
                     "SELECT evidence_reference FROM reconciliation_mutation_probe WHERE id = 1")) {
+                assertThat(result.next()).isTrue();
+                assertThat(result.getString(1)).isEqualTo("receipt:verified");
+                assertThat(result.next()).isFalse();
+            }
+        }
+    }
+
+    /** TRUNCATE skips row-level DELETE triggers; a statement trigger must block it. */
+    private void assertAuditTruncateGuard(Connection connection) throws SQLException {
+        try (PreparedStatement query = connection.prepareStatement("""
+                SELECT 1 FROM pg_trigger t
+                  JOIN pg_class c ON c.oid = t.tgrelid
+                  JOIN pg_namespace n ON n.oid = c.relnamespace
+                 WHERE n.nspname = 'public'
+                   AND c.relname = 'task_checkpoint_reconciliation_audit'
+                   AND t.tgname = 'trg_reconciliation_audit_no_truncate'
+                   AND (t.tgtype & 32) = 32
+                   AND (t.tgtype & 1) = 0
+                   AND NOT t.tgisinternal AND t.tgenabled = 'O'
+                """)) {
+            try (ResultSet result = query.executeQuery()) {
+                assertThat(result.next()).isTrue();
+                assertThat(result.next()).isFalse();
+            }
+        }
+
+        // Exercise the deployed trigger function on an isolated table. TRUNCATE
+        // must fail even when the table is empty, and preserve existing rows.
+        try (java.sql.Statement statement = connection.createStatement()) {
+            statement.execute("CREATE TEMP TABLE reconciliation_truncate_probe "
+                    + "(LIKE task_checkpoint_reconciliation_audit INCLUDING CONSTRAINTS)");
+            statement.execute("""
+                    CREATE TRIGGER trg_reconciliation_truncate_probe
+                    BEFORE TRUNCATE ON reconciliation_truncate_probe
+                    FOR EACH STATEMENT EXECUTE FUNCTION reject_reconciliation_audit_mutation()
+                    """);
+            assertThatThrownBy(() -> statement.execute("TRUNCATE reconciliation_truncate_probe"))
+                    .isInstanceOf(SQLException.class);
+            statement.execute("""
+                    INSERT INTO reconciliation_truncate_probe
+                        (id, checkpoint_id, previous_attempt, previous_claim_token,
+                         resolved_state, evidence_reference, reconciled_at)
+                    VALUES (1, 1, 1, '00000000-0000-0000-0000-000000000001',
+                            'SUCCEEDED', 'receipt:verified', CURRENT_TIMESTAMP)
+                    """);
+            assertThatThrownBy(() -> statement.execute("TRUNCATE reconciliation_truncate_probe"))
+                    .isInstanceOf(SQLException.class);
+            try (ResultSet result = statement.executeQuery(
+                    "SELECT evidence_reference FROM reconciliation_truncate_probe")) {
                 assertThat(result.next()).isTrue();
                 assertThat(result.getString(1)).isEqualTo("receipt:verified");
                 assertThat(result.next()).isFalse();

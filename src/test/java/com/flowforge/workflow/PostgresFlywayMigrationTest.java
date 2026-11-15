@@ -31,7 +31,7 @@ class PostgresFlywayMigrationTest {
 
         Flyway flyway = Flyway.configure().dataSource(url, username, password).load();
         flyway.migrate();
-        assertThat(flyway.info().current().getVersion().getVersion()).isEqualTo("17");
+        assertThat(flyway.info().current().getVersion().getVersion()).isEqualTo("18");
 
         try (Connection connection = DriverManager.getConnection(url, username, password)) {
             assertThat(hasColumn(connection, "workflows", "schedule_type")).isTrue();
@@ -67,6 +67,8 @@ class PostgresFlywayMigrationTest {
                     "chk_task_reconciliation_evidence_no_controls")).isTrue();
             assertThat(hasConstraint(connection, "task_checkpoint_reconciliation_audit",
                     "chk_task_reconciliation_evidence_max_length")).isTrue();
+            assertThat(hasConstraint(connection, "task_checkpoint_reconciliation_audit",
+                    "chk_task_reconciliation_evidence_trimmed")).isTrue();
             assertEvidenceControlConstraint(connection);
             assertAuditRetentionForeignKey(connection);
             assertAuditAppendOnlyTrigger(connection);
@@ -99,6 +101,18 @@ class PostgresFlywayMigrationTest {
             insert.setLong(1, 3);
             insert.setString(2, "ticket:forged\rentry");
             assertThatThrownBy(insert::executeUpdate).isInstanceOf(SQLException.class);
+
+            insert.setLong(1, 6);
+            insert.setString(2, " receipt:verified");
+            assertThatThrownBy(insert::executeUpdate).isInstanceOf(SQLException.class);
+
+            insert.setLong(1, 7);
+            insert.setString(2, "receipt:verified ");
+            assertThatThrownBy(insert::executeUpdate).isInstanceOf(SQLException.class);
+
+            insert.setLong(1, 8);
+            insert.setString(2, "receipt:verified");
+            assertThat(insert.executeUpdate()).isEqualTo(1);
 
             insert.setLong(1, 4);
             insert.setString(2, "a".repeat(512));

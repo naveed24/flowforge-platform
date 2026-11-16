@@ -1,0 +1,40 @@
+name: Local Kafka Compose smoke test
+
+on:
+  pull_request:
+    paths:
+      - docker-compose.yml
+      - .github/workflows/kafka-compose.yml
+  push:
+    branches: [main]
+    paths:
+      - docker-compose.yml
+      - .github/workflows/kafka-compose.yml
+
+permissions:
+  contents: read
+
+jobs:
+  kafka:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate Compose configuration
+        run: docker compose --profile kafka config --quiet
+      - name: Start local Kafka
+        run: docker compose --profile kafka up -d --wait kafka
+      - name: Provision dispatch and dead-letter topics
+        run: docker compose --profile kafka run --rm kafka-init
+      - name: Verify both topics exist
+        run: |
+          docker compose --profile kafka exec -T kafka /opt/kafka/bin/kafka-topics.sh --bootstrap-server localhost:9092 --describe --topic flowforge.execution.dispatch.v1
+          docker compose --profile kafka exec -T kafka /opt/kafka/bin/kafka-topics.sh --bootstrap-server localhost:9092 --describe --topic flowforge.execution.dispatch.v1.DLT
+      - name: Repeat provisioning safely
+        run: docker compose --profile kafka run --rm kafka-init
+      - name: Show Kafka logs on failure
+        if: failure()
+        run: docker compose --profile kafka logs --no-color kafka kafka-init
+      - name: Tear down
+        if: always()
+        run: docker compose --profile kafka down --remove-orphans

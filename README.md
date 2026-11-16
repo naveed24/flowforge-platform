@@ -182,7 +182,7 @@ execution, remain future milestones.
 
 New executions and due retry requeues now persist an outbox event in the same
 database transaction as their `QUEUED` state. Flyway V7 also backfills
-currently queued runs from existing deployments. Kafka publication is **opt-in and disabled by default**. Flyway V8 adds token-fenced, expiring outbox claims, broker-acknowledged publication, and bounded backoff after failures. Set `FLOWFORGE_DISPATCH_ENABLED=true` and `KAFKA_BOOTSTRAP_SERVERS=localhost:9092` after provisioning a Kafka broker and topic. Publication is at-least-once. A disabled-by-default Kafka worker can now complete NOOP-only DAGs transactionally; other task types are not executed. See [dispatch outbox design](docs/execution-dispatch-outbox.md) and [NOOP worker operations](docs/kafka-noop-worker.md).
+currently queued runs from existing deployments. Kafka publication is **opt-in and disabled by default**. Flyway V8 adds token-fenced, expiring outbox claims, broker-acknowledged publication, and bounded backoff after failures. Set `FLOWFORGE_DISPATCH_ENABLED=true` and `KAFKA_BOOTSTRAP_SERVERS=localhost:9092` after provisioning a Kafka broker and topic. Publication is at-least-once. A disabled-by-default Kafka worker can now complete NOOP-only DAGs transactionally; other task types are not executed. See [dispatch outbox design](docs/execution-dispatch-outbox.md), [NOOP worker operations](docs/kafka-noop-worker.md), and [optional local Kafka setup](docs/local-kafka-development.md).
 
 ## Execution observability
 

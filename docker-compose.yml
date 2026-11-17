@@ -63,9 +63,9 @@ services:
       - |
         for topic in flowforge.execution.dispatch.v1 flowforge.execution.dispatch.v1.DLT; do
           /opt/kafka/bin/kafka-topics.sh --bootstrap-server kafka:19092 \
-            --create --if-not-exists --topic "$topic" --partitions 3 --replication-factor 1
+            --create --if-not-exists --topic "$$topic" --partitions 3 --replication-factor 1
           /opt/kafka/bin/kafka-topics.sh --bootstrap-server kafka:19092 \
-            --describe --topic "$topic"
+            --describe --topic "$$topic"
         done
 
 volumes:

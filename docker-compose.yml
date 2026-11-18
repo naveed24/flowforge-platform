@@ -23,6 +23,51 @@ services:
     volumes:
       - flowforge_redis_data:/data
 
+  # Optional local Kafka broker. Start with: docker compose --profile kafka up -d
+  # Two listeners keep host clients (localhost:9092) and Compose clients
+  # (kafka:19092) independently reachable.
+  kafka:
+    profiles: ["kafka"]
+    image: apache/kafka:3.9.1
+    ports:
+      - "127.0.0.1:9092:9092"
+    environment:
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: broker,controller
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@localhost:9093
+      KAFKA_LISTENERS: HOST://0.0.0.0:9092,INTERNAL://0.0.0.0:19092,CONTROLLER://0.0.0.0:9093
+      KAFKA_ADVERTISED_LISTENERS: HOST://localhost:9092,INTERNAL://kafka:19092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: HOST:PLAINTEXT,INTERNAL:PLAINTEXT,CONTROLLER:PLAINTEXT
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_INTER_BROKER_LISTENER_NAME: INTERNAL
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "false"
+    healthcheck:
+      test: ["CMD-SHELL", "/opt/kafka/bin/kafka-broker-api-versions.sh --bootstrap-server localhost:9092 >/dev/null 2>&1"]
+      interval: 10s
+      timeout: 10s
+      retries: 15
+      start_period: 20s
+
+  # Topic provisioning is idempotent; failed provisioning fails this service.
+  kafka-init:
+    profiles: ["kafka"]
+    image: apache/kafka:3.9.1
+    depends_on:
+      kafka:
+        condition: service_healthy
+    entrypoint: ["/bin/bash", "-ec"]
+    command:
+      - |
+        for topic in flowforge.execution.dispatch.v1 flowforge.execution.dispatch.v1.DLT; do
+          /opt/kafka/bin/kafka-topics.sh --bootstrap-server kafka:19092 \
+            --create --if-not-exists --topic "$$topic" --partitions 3 --replication-factor 1
+          /opt/kafka/bin/kafka-topics.sh --bootstrap-server kafka:19092 \
+            --describe --topic "$$topic"
+        done
+
 volumes:
   flowforge_postgres_data:
   flowforge_redis_data:

@@ -24,6 +24,16 @@ class ExecutionDispatchConsumerValidationTest {
     }
 
     @Test
+    void rejectsMissingManualAcknowledgmentBeforeWorkerSideEffects() {
+        var event = new ExecutionDispatchMessage(1, 1, 1);
+        assertThatThrownBy(() -> consumer.onMessage(record("1", event), null))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("Manual Kafka acknowledgment");
+        verifyNoInteractions(worker, ack);
+        assertThat(count("failed")).isEqualTo(1);
+    }
+
+    @Test
     void rejectsNullPayloadWithoutAcknowledgment() {
         reject("1", null);
     }

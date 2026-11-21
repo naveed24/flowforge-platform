@@ -32,6 +32,9 @@ public class ExecutionDispatchConsumer {
         Timer.Sample sample = Timer.start(meters);
         String result = "failed";
         try {
+            if (acknowledgment == null) {
+                throw new IllegalStateException("Manual Kafka acknowledgment is required before dispatch");
+            }
             if (record == null || record.value() == null) {
                 throw new IllegalArgumentException("Dispatch record and payload are required");
             }

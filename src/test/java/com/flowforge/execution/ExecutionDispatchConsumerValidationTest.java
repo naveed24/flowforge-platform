@@ -93,6 +93,22 @@ class ExecutionDispatchConsumerValidationTest {
     }
 
     @Test
+    void missingWorkerOutcomeDoesNotAcknowledgeOrReportSuccess() {
+        var event = new ExecutionDispatchMessage(1, 1, 1);
+        when(worker.process(event)).thenReturn(null);
+
+        assertThatThrownBy(() -> consumer.onMessage(record("1", event), ack))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("no dispatch outcome");
+
+        verify(worker).process(event);
+        verifyNoInteractions(ack);
+        assertThat(count("failed")).isEqualTo(1);
+        assertThat(meters.find("flowforge.worker.dispatch")
+                .tag("result", "succeeded").counter()).isNull();
+    }
+
+    @Test
     void acknowledgmentFailureCannotBeCountedAsSuccess() {
         var event = new ExecutionDispatchMessage(1, 1, 1);
         when(worker.process(event)).thenReturn(NoopWorkflowDispatchService.Outcome.SUCCEEDED);

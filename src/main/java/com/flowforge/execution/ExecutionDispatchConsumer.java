@@ -48,6 +48,11 @@ public class ExecutionDispatchConsumer {
                 log.warn("Unsupported tasks in execution {} attempt {}",
                         event.executionId(), event.attemptNumber());
             }
+            // Never commit an offset for an unrecognized worker result. In particular,
+            // a null outcome must not be acknowledged before the switch rejects it.
+            if (outcome == null) {
+                throw new IllegalStateException("Worker returned no dispatch outcome");
+            }
             // Count a successful outcome only after the offset is acknowledged.
             acknowledgment.acknowledge();
             result = switch (outcome) {
